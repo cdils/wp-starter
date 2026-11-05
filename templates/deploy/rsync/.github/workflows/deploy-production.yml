@@ -1,0 +1,30 @@
+# Production. The environment is passed as an input, so the environment GitHub gates
+# on and the secrets used can't disagree. Add required reviewers to `production`.
+
+name: Deploy production
+
+on:
+  push:
+    branches: [{{PROD_BRANCH}}]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Rehearse the rsync without writing to the server'
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      url: {{PRODUCTION_URL_OR_REPO}}
+      dry_run: ${{ inputs.dry_run || false }}
+    secrets:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PATH: ${{ secrets.SSH_PATH }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}

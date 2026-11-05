@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<ruleset name="Custom">
+    <description>Custom ruleset for {{PROJECT_NAME}}.</description>
+
+    <!-- Scan our own code by default. Run `lando phpcs path/to/file` to target a path. -->
+@@if HAS_THEME
+    <file>wp-content/themes/{{THEME_NAME}}</file>
+@@endif
+    <file>wp-content/mu-plugins</file>
+
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/assets/*</exclude-pattern>
+    <exclude-pattern>wp-content/mu-plugins/index.php</exclude-pattern>
+
+    <!-- Include the entire WordPress coding standards -->
+    <rule ref="WordPress">
+
+        <!-- Exclude specific errors -->
+        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+        <exclude name="Universal.Operators.DisallowShortTernary.Found"/>
+        <exclude name="Universal.Files.SeparateFunctionsFromOO.Mixed"/>
+
+    </rule>
+
+    <!-- Flag code that would break on the project's PHP version(s). -->
+    <config name="testVersion" value="{{PHP_VERSION}}-"/>
+    <rule ref="PHPCompatibilityWP"/>
+</ruleset>

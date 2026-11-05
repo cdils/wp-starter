@@ -1,0 +1,56 @@
+      - uses: {{ACTION_CHECKOUT}}
+
+      - uses: {{ACTION_SETUP_PHP}}
+        with:
+          php-version: '{{PHP_VERSION}}'
+          extensions: curl, mbstring, xml, zip, intl
+          tools: composer:v2
+          coverage: none
+@@if ASSETS
+
+      - uses: {{ACTION_PNPM}}
+
+      - uses: {{ACTION_SETUP_NODE}}
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+@@endif
+
+      - name: Composer authentication
+        env:
+          AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # An empty auth.json is invalid JSON, so only write it when the secret is set.
+          if [ -n "$AUTH_JSON" ]; then
+            printf '%s' "$AUTH_JSON" > auth.json
+          fi
+          # Packages from GitHub VCS repos are rate-limited per runner when anonymous.
+          composer config --global --auth github-oauth.github.com "$GH_TOKEN"
+
+      - uses: {{ACTION_CACHE}}
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      # Dev packages are needed for the lint gate, then pruned below.
+      - name: Install Composer dependencies (with dev)
+        run: composer install --no-interaction --prefer-dist
+
+      - name: PHPCS and PHPStan
+        run: composer lint
+@@if ASSETS
+
+      - name: Install and lint assets
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm lint
+
+      - name: Build assets
+        run: pnpm build
+@@endif
+
+      # Query Monitor, Disable Emails and PHP tooling must never reach the server.
+      - name: Prune dev dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist

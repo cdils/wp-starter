@@ -1,0 +1,123 @@
+# Deployment answers, tokens and rendering. Hosts are data: see templates/deploy/hosts/.
+
+host_presets() {
+    local file
+    for file in "$STARTER_ROOT"/templates/deploy/hosts/*.conf; do
+        basename "$file" .conf
+    done
+}
+
+ask_deploy() {
+    ask_choice DEPLOY_HOST "Where does this site deploy?" \
+        none "Not decided yet (CI only)" \
+        bigscoots "BigScoots" \
+        wpengine "WP Engine" \
+        siteground "SiteGround" \
+        hostgator "HostGator" \
+        godaddy "GoDaddy (SFTP)" \
+        ssh "Other host with SSH and rsync" \
+        sftp "Other host with SFTP only"
+
+    if [ "$DEPLOY_HOST" = none ]; then
+        return 0
+    fi
+
+    ask PROD_BRANCH "Production branch" "main" valid_branch
+    ask_yn HAS_STAGING "Is there a staging site?" y
+    if [ "$HAS_STAGING" = true ]; then
+        ask STAGING_BRANCH "Staging branch" "develop" valid_branch
+        ask STAGING_URL "Staging URL" "" valid_url
+    fi
+    if [ "$DEPLOY_HOST" = wpengine ]; then
+        ask WPE_ENV_PRODUCTION "WP Engine production install name" "" valid_slug
+        if [ "$HAS_STAGING" = true ]; then
+            ask WPE_ENV_STAGING "WP Engine staging install name" "" valid_slug
+        fi
+    fi
+}
+
+# Space-separated preset values become the flag syntax each transport expects.
+rsync_flags() {
+    local item
+    for item in $1; do
+        printf -- "--exclude='%s' \\\\\n" "$item"
+    done
+}
+
+prefixed_flags() {
+    local item
+    for item in $2; do
+        printf -- " --exclude=%s%s%s" "$3" "$item" "$1"
+    done
+}
+
+derive_deploy_tokens() {
+    export DEPLOY_HOST="${DEPLOY_HOST:-none}" HAS_STAGING="${HAS_STAGING:-false}"
+    export PROD_BRANCH="${PROD_BRANCH:-main}" STAGING_BRANCH="${STAGING_BRANCH:-develop}"
+    export STAGING_URL="${STAGING_URL:-}"
+    export WPE_ENV_PRODUCTION="${WPE_ENV_PRODUCTION:-}" WPE_ENV_STAGING="${WPE_ENV_STAGING:-}"
+
+    DEPLOY=false
+    [ "$DEPLOY_HOST" != none ] && DEPLOY=true
+    export DEPLOY
+
+    export CI_BRANCHES="$PROD_BRANCH"
+    [ "$HAS_STAGING" = true ] && CI_BRANCHES="$STAGING_BRANCH, $PROD_BRANCH"
+
+    export STAGING_ENV_NOTE=""
+    [ "$HAS_STAGING" = true ] && STAGING_ENV_NOTE=" and \`staging\`"
+
+    export SSH_ALIAS="${PROJECT_NAME}-production"
+    [ "$HAS_STAGING" = true ] && SSH_ALIAS="${PROJECT_NAME}-staging"
+
+    export HOST_LABEL="" TRANSPORT="" SSH_PORT="22" SECRET_NAMES="" DEPLOY_SUMMARY=""
+    export ROOT_EXCLUDE_FLAGS="" WP_CONTENT_EXCLUDE_FLAGS="" WP_CONTENT_EXCLUDE_MIRROR=""
+    export WP_CONTENT_EXCLUDE_WPE="" ROOT_EXCLUDE_WPE="" BUILD_STEPS=""
+
+    [ "$DEPLOY" = true ] || return 0
+
+    local preset="$STARTER_ROOT/templates/deploy/hosts/${DEPLOY_HOST}.conf"
+    [ -f "$preset" ] || die "Unknown host preset: $DEPLOY_HOST"
+    local ROOT_EXCLUDES="" WP_CONTENT_EXCLUDES=""
+    # shellcheck disable=SC1090
+    . "$preset"
+
+    ROOT_EXCLUDE_FLAGS=$(rsync_flags "$ROOT_EXCLUDES")
+    WP_CONTENT_EXCLUDE_FLAGS=$(rsync_flags "$WP_CONTENT_EXCLUDES")
+    WP_CONTENT_EXCLUDE_MIRROR=$(prefixed_flags "'" "$WP_CONTENT_EXCLUDES" "'^")
+    WP_CONTENT_EXCLUDE_WPE=$(prefixed_flags "" "$WP_CONTENT_EXCLUDES" "wp-content/")
+    ROOT_EXCLUDE_WPE=$(prefixed_flags "" "$ROOT_EXCLUDES" "")
+
+    case "$TRANSPORT" in
+        rsync)
+            DEPLOY_SUMMARY="rsync over SSH in three passes, with \`--delete\` scoped to \`wp-admin\`, \`wp-includes\` and \`wp-content\`. The server keeps its own \`wp-config.php\`. Run the deploy workflow by hand with \`dry_run\` to rehearse."
+            SECRET_NAMES="\`SSH_HOST\`, \`SSH_USER\`, \`SSH_PATH\`, \`SSH_PORT\`, \`SSH_PRIVATE_KEY\`"
+            [ "$HAS_STAGING" = true ] && SECRET_NAMES="$SECRET_NAMES, and the \`SSH_STAGING_*\` equivalents"
+            SECRET_NAMES="$SECRET_NAMES. Optional: \`SSH_KNOWN_HOSTS\` to pin the host key."
+            ;;
+        sftp)
+            DEPLOY_SUMMARY="SFTP mirror of \`wp-content\` only. WordPress core on the server is not managed by Composer, so it updates separately, and composer.lock's core version may not match production."
+            SECRET_NAMES="\`SFTP_HOST\`, \`SFTP_USER\`, \`SFTP_PASSWORD\`, \`SFTP_PATH\`"
+            [ "$HAS_STAGING" = true ] && SECRET_NAMES="$SECRET_NAMES, and the \`SFTP_STAGING_*\` equivalents"
+            SECRET_NAMES="$SECRET_NAMES."
+            ;;
+        wpe)
+            DEPLOY_SUMMARY="WP Engine's official GitHub Action, using the SSH Gateway. Install names are in the \`deploy-*.yml\` callers."
+            SECRET_NAMES="\`WPE_SSHG_KEY_PRIVATE\`."
+            ;;
+        *) die "Unknown transport in $preset: $TRANSPORT" ;;
+    esac
+    [ "$HAS_AUTH" = true ] && SECRET_NAMES="$SECRET_NAMES Also \`COMPOSER_AUTH_JSON\` (the contents of auth.json)."
+
+    BUILD_STEPS=$(perl "$STARTER_ROOT/lib/render.pl" build-steps.yml \
+        < "$STARTER_ROOT/templates/deploy/partials/build-steps.yml")
+    export TRANSPORT HOST_LABEL SSH_PORT
+}
+
+render_ci_and_deploy() {
+    local policy="${1:-overwrite}"
+    render_overlay "$STARTER_ROOT/templates/ci" . "$policy"
+    if [ "$DEPLOY" = true ]; then
+        render_overlay "$STARTER_ROOT/templates/deploy/$TRANSPORT" . "$policy"
+    fi
+}

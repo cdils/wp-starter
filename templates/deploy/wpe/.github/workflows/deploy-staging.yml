@@ -1,0 +1,17 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [{{STAGING_BRANCH}}]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      url: {{STAGING_URL}}
+      wpe_env: {{WPE_ENV_STAGING}}
+    secrets:
+      WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}

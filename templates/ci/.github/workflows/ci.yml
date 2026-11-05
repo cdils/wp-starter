@@ -1,0 +1,115 @@
+# Runs on every pull request, before anything can reach a branch that deploys.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [{{CI_BRANCHES}}]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    name: PHP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {{ACTION_CHECKOUT}}
+
+      - uses: {{ACTION_SETUP_PHP}}
+        with:
+          php-version: '{{PHP_VERSION}}'
+          tools: composer:v2
+          coverage: none
+
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-all
+
+      # A syntax error in the theme white-screens the whole site.
+      # Lint only code we author; Composer-installed packages have their own CI.
+      - name: Lint syntax
+        run: |
+          set -euo pipefail
+          find wp-content/mu-plugins wp-config.php index.php \
+@@if HAS_THEME
+            wp-content/themes/{{THEME_NAME}} \
+@@endif
+            -name '*.php' -print0 | xargs -0 -r -n1 php -l
+
+      - name: Composer authentication
+        env:
+          AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # An empty auth.json is invalid JSON, so only write it when the secret is set.
+          if [ -n "$AUTH_JSON" ]; then
+            printf '%s' "$AUTH_JSON" > auth.json
+          fi
+          composer config --global --auth github-oauth.github.com "$GH_TOKEN"
+
+      - uses: {{ACTION_CACHE}}
+        with:
+          path: ~/.cache/composer
+          key: composer-dev-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-dev-
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: PHPCS and PHPStan
+        run: composer lint
+@@if ASSETS
+
+  assets:
+    name: JS & CSS (pnpm + webpack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {{ACTION_CHECKOUT}}
+
+      - uses: {{ACTION_PNPM}}
+
+      - uses: {{ACTION_SETUP_NODE}}
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+@@endif
+
+  secrets:
+    name: Secrets scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {{ACTION_CHECKOUT}}
+        with:
+          fetch-depth: 0
+
+      # Two scanners on purpose:
+      #   TruffleHog verifies candidates against real APIs, so a hit is an active credential.
+      #   Gitleaks is pattern matching, so it catches what can't be verified (salts, keys).
+      - name: TruffleHog (verified secrets)
+        uses: {{ACTION_TRUFFLEHOG}}
+        with:
+          extra_args: --only-verified
+
+      # The binary, not gitleaks-action: the action needs a paid license on org-owned repos.
+      - name: Gitleaks (pattern scan)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v{{GITLEAKS_VERSION}}/gitleaks_{{GITLEAKS_VERSION}}_linux_x64.tar.gz"
+          echo "{{GITLEAKS_SHA256}}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks git --redact --no-banner .

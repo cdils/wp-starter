@@ -1,0 +1,19 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [{{PROD_BRANCH}}]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      url: {{PRODUCTION_URL_OR_REPO}}
+    secrets:
+      SFTP_HOST: ${{ secrets.SFTP_HOST }}
+      SFTP_USER: ${{ secrets.SFTP_USER }}
+      SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+      SFTP_PATH: ${{ secrets.SFTP_PATH }}
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}

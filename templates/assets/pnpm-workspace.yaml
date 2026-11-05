@@ -1,0 +1,5 @@
+# pnpm blocks dependency build scripts unless they're listed here. Neither of these
+# needs its script: @parcel/watcher ships prebuilds and core-js only prints a banner.
+allowBuilds:
+  '@parcel/watcher': false
+  core-js: false

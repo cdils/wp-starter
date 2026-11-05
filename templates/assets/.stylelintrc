@@ -1,0 +1,21 @@
+{
+  "extends": "@wordpress/stylelint-config",
+  "plugins": ["stylelint-order", "stylelint-scss"],
+  "ignoreFiles": [
+    "**/*.jpg",
+    "**/*.png",
+    "**/*.gif",
+    "**/*.svg",
+    "wp-content/themes/{{THEME_NAME}}/assets/scss/vendor/**/**"
+  ],
+  "rules": {
+    "selector-class-pattern": null,
+    "length-zero-no-unit": null,
+    "order/properties-alphabetical-order": true,
+    "no-empty-source": null,
+    "no-descending-specificity": null,
+    "at-rule-no-unknown": null,
+    "scss/at-rule-no-unknown": true,
+    "function-url-quotes": "always"
+  }
+}

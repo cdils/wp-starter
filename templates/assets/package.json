@@ -1,0 +1,41 @@
+{
+  "name": "{{PROJECT_NAME}}",
+  "version": "1.0.0",
+  "description": "Asset pipeline for {{PROJECT_NAME}}. pnpm only.",
+  "private": true,
+  "packageManager": "pnpm@{{PNPM_VERSION}}",
+  "license": "GPL-2.0-or-later",
+  "engines": {
+    "node": ">={{NODE_VERSION}}"
+  },
+  "scripts": {
+    "build": "webpack --mode=production",
+    "dev": "webpack --mode=development --watch",
+    "lint:js": "eslint \"wp-content/themes/{{THEME_NAME}}/**/*.{js,jsx}\" --no-error-on-unmatched-pattern",
+    "lint:css": "stylelint \"wp-content/themes/{{THEME_NAME}}/**/*.{css,scss}\" --custom-syntax postcss-scss --allow-empty-input",
+    "lint": "pnpm lint:js && pnpm lint:css",
+    "format": "prettier --write \"wp-content/themes/{{THEME_NAME}}/**/*.{js,jsx,scss,css}\""
+  },
+  "devDependencies": {
+    "@wordpress/eslint-plugin": "^25.7.0",
+    "@wordpress/stylelint-config": "^23.24.0",
+    "css-loader": "^7.1.2",
+    "css-minimizer-webpack-plugin": "^7.0.2",
+    "eslint": "^9.39.0",
+    "eslint-webpack-plugin": "^5.0.2",
+    "globals": "^16.5.0",
+    "mini-css-extract-plugin": "^2.7.6",
+    "postcss-scss": "^4.0.9",
+    "prettier": "^3.0.3",
+    "sass": "^1.68.0",
+    "sass-loader": "^16.0.5",
+    "stylelint": "^16.8.2",
+    "stylelint-order": "^7.0.0",
+    "stylelint-scss": "^6.12.1",
+    "stylelint-webpack-plugin": "^5.0.1",
+    "terser-webpack-plugin": "^5.3.9",
+    "webpack": "^5.102.1",
+    "webpack-cli": "^6.0.1",
+    "webpack-remove-empty-scripts": "^1.0.4"
+  }
+}

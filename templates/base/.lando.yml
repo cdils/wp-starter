@@ -1,0 +1,77 @@
+name: {{PROJECT_NAME}}
+recipe: wordpress
+config:
+  config:
+    vhosts: config/lando.conf
+    php: config/php.ini
+  webroot: .
+  php: '{{PHP_VERSION}}'
+  composer_version: '{{COMPOSER_LANDO_VERSION}}'
+  database: mysql:{{MYSQL_VERSION}}
+  via: nginx
+proxy:
+  mailpit:
+    - mail.{{PROJECT_NAME}}.lndo.site
+services:
+  appserver:
+    xdebug: true
+    environment:
+      PHP_IDE_CONFIG: "serverName={{PROJECT_NAME}}.lndo.site"
+      XDEBUG_CONFIG: "idekey=XDEBUG"
+    build_as_root:
+      - rm -f /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini && pkill -o -USR2 php-fpm && echo "Xdebug disabled"
+      - apt update -y && apt install zip subversion -y
+  database:
+    portforward: true
+@@if ASSETS
+  node:
+    type: node:{{NODE_VERSION}}
+    build_as_root:
+      - corepack enable
+    overrides:
+      environment:
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+@@endif
+  mailpit:
+    type: mailpit
+    mailfrom:
+      - appserver
+tooling:
+@@if ASSETS
+  node:
+    service: node
+  pnpm:
+    service: node
+    description: Run pnpm (pinned by packageManager, via corepack)
+    cmd: pnpm
+@@endif
+  phpcs:
+    service: appserver
+    description: Run PHP_CodeSniffer
+    cmd: wp-content/vendor/bin/phpcs
+  phpcbf:
+    service: appserver
+    description: Run the PHP_CodeSniffer fixer
+    cmd: wp-content/vendor/bin/phpcbf
+  phpstan:
+    service: appserver
+    description: Run PHPStan static analysis
+    cmd: wp-content/vendor/bin/phpstan analyse
+@@if HAS_THEME
+  make-pot:
+    service: appserver
+    description: Generate a .pot translation template for the theme
+    cmd: wp i18n make-pot wp-content/themes/{{THEME_NAME}} wp-content/themes/{{THEME_NAME}}/languages/{{THEME_NAME}}.pot --domain={{THEME_NAME}}
+@@endif
+  xdebug-on:
+    service: appserver
+    description: Enable xdebug for nginx.
+    cmd: rm -f /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini && docker-php-ext-enable xdebug && pkill -o -USR2 php-fpm && echo "Xdebug enabled"
+    user: root
+  xdebug-off:
+    service: appserver
+    description: Disable xdebug for nginx.
+    cmd: rm -f /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini && pkill -o -USR2 php-fpm && echo "Xdebug disabled"
+    user: root
+keys:
+  - id_rsa

@@ -1,0 +1,141 @@
+# ignore everything except premium plugins and code we are responsible for.
+/cms/
+/wp-content/mu-plugins/*
+/wp-content/plugins/*
+/wp-content/themes/*
+/wp-content/uploads
+/wp-content/vendor
+/wp-content/cache
+/wp-content/db.php
+/wp-content/object-cache.php
+/wp-content/advanced-cache.php
+/wp-content/wp-rocket-config/*
+
+# ignore all files starting with . or ~
+.*
+~*
+!.github*
+
+# ignore node dependency directories (used by grunt)
+node_modules/
+
+# ignore OS generated files
+ehthumbs.db
+Thumbs.db
+
+# ignore Editor files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.komodoproject
+
+# ignore log files and databases
+*.log
+*.sql
+*.sqlite
+
+# ignore compiled files
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+*.app
+*.war
+
+# ignore packaged files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+@@if ASSETS
+/wp-content/themes/{{THEME_NAME}}/assets/css/main.css
+/wp-content/themes/{{THEME_NAME}}/assets/css/main.css.map
+/wp-content/themes/{{THEME_NAME}}/assets/js/main.min.js
+/wp-content/themes/{{THEME_NAME}}/assets/js/main.min.js.map
+@@endif
+
+# Ignore plugin build files.
+
+# Ignore local dev files
+LocalValetDriver.php
+.phpunit.result.cache
+/phpstan.neon
+/.vagrant
+Homestead.json
+Homestead.yaml
+.rej
+.nova
+wpcs
+wp-content/error_log
+.env
+auth.json
+.wp-project-*
+
+# Ignore large media files
+# *.mp4 # ignore for now
+*.tiff
+*.avi
+*.flv
+*.mov
+*.wmv
+
+# -------------------------
+# BEGIN Whitelisted Files
+# -------------------------
+!/.gitignore
+!/cms/.gitkeep
+!/wp-content/mu-plugins/index.php
+!/wp-content/plugins/index.php
+!/wp-content/themes/index.php
+
+# Non Composer MU Plugins
+
+# Non Composer Plugins
+
+# Non Composer Themes
+@@if HAS_THEME
+!/wp-content/themes/{{THEME_NAME}}
+@@endif
+
+# track favicon files, if they exist
+!android-chrome-*.png
+!apple-touch-icon*.png
+!browserconfig.xml
+!favicon*.png
+!manifest.json
+!mstile-*.png
+!safari-pinned-tab.svg
+!site.webmanifest
+
+# Local dev setup files
+!.lando.yml
+!/config
+!.env.example
+!/index.php
+!AGENTS.md
+!CLAUDE.md
+!/auth.json.example
+!/wp-config.php
+!README.md
+!ENABLE-PRODUCTION.md
+!CHANGELOG.md
+!/composer.*
+!/package.*
+
+# Code standards
+!phpcs.xml
+!.phpcs.xml.dist
+!phpstan.neon.dist
+!.editorconfig
+!.nvmrc
+!.prettierrc
+!.stylelintrc
+!eslint.config.js

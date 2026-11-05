@@ -1,0 +1,29 @@
+# Staging. All the work happens in deploy.yml; this only says which environment.
+
+name: Deploy staging
+
+on:
+  push:
+    branches: [{{STAGING_BRANCH}}]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Rehearse the rsync without writing to the server'
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      url: {{STAGING_URL}}
+      dry_run: ${{ inputs.dry_run || false }}
+    secrets:
+      SSH_HOST: ${{ secrets.SSH_STAGING_HOST }}
+      SSH_USER: ${{ secrets.SSH_STAGING_USER }}
+      SSH_PATH: ${{ secrets.SSH_STAGING_PATH }}
+      SSH_PORT: ${{ secrets.SSH_STAGING_PORT }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_STAGING_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_STAGING_KNOWN_HOSTS }}
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}

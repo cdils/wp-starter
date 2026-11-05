@@ -1,0 +1,17 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [{{PROD_BRANCH}}]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      url: {{PRODUCTION_URL_OR_REPO}}
+      wpe_env: {{WPE_ENV_PRODUCTION}}
+    secrets:
+      WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}

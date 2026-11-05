@@ -1,0 +1,216 @@
+# Reusable build-and-deploy pipeline. Staging and production both call this file;
+# they differ only in inputs and secrets, so there's no second copy to drift.
+#
+# Host: {{HOST_LABEL}}
+
+name: Build & Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'GitHub environment to deploy into'
+        required: true
+        type: string
+      url:
+        description: 'Public URL, for the deployment summary'
+        required: true
+        type: string
+      dry_run:
+        description: 'Rehearse the rsync without writing to the server'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      SSH_HOST:
+        required: true
+      SSH_USER:
+        required: true
+      SSH_PATH:
+        required: true
+      SSH_PORT:
+        required: false
+      SSH_PRIVATE_KEY:
+        required: true
+      SSH_KNOWN_HOSTS:
+        required: false
+      COMPOSER_AUTH_JSON:
+        required: false
+
+permissions:
+  contents: read
+
+# One deploy at a time per environment. Two rsyncs racing leave the docroot undefined.
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  secrets-scan:
+    name: Secrets scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {{ACTION_CHECKOUT}}
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog
+        uses: {{ACTION_TRUFFLEHOG}}
+        with:
+          extra_args: --only-verified
+
+  # Build and deploy share a job on purpose. Nothing passes through an artifact, so
+  # hidden files survive (upload-artifact drops them by default, and rsync --delete
+  # would then remove them from the server) and premium plugin code is never stored.
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    needs: secrets-scan
+    # Bound to the caller's input, so it can't disagree with the secrets in use.
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.url }}
+    steps:
+{{BUILD_STEPS}}
+
+      - name: Assemble release (flat WordPress layout)
+        run: |
+          set -euo pipefail
+
+          # Local dev keeps core in cms/ with wp-content beside it. The server runs a
+          # standard flat layout with its OWN wp-config.php, so fold wp-content into
+          # cms/ and ship cms/ as the docroot. The dev index.php and wp-config.php stay behind.
+          rm -rf cms/wp-content
+          mv wp-content cms/wp-content
+
+          # Uploads are server-owned; core's composer.json has no business in a docroot.
+          rm -rf cms/wp-content/uploads
+          rm -f cms/composer.json
+
+          # Strip developer-only files and anything that must never reach a docroot.
+          find cms -type d \( -name .git -o -name .github -o -name tests -o -name __tests__ -o -name node_modules \) \
+            -prune -exec rm -rf {} +
+          find cms \( -name '.env' -o -name '.env.*' -o -name 'id_rsa*' -o -name '*.pem' -o -name 'auth.json' \) -delete
+
+          echo "docroot payload: $(du -sh cms | cut -f1)"
+
+      - name: Set up SSH
+        uses: {{ACTION_SSH_AGENT}}
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host key
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          # A pinned SSH_KNOWN_HOSTS is stronger; ssh-keyscan trusts whatever answers.
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H -p "${SSH_PORT:-{{SSH_PORT}}}" "$SSH_HOST" >> ~/.ssh/known_hosts
+          fi
+
+      - name: Deploy via rsync
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          TARGET: ${{ secrets.SSH_PATH }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          # An empty TARGET would make the destination "user@host:", which rsync reads
+          # as the account's home directory, and --delete would run against it.
+          if [ -z "$TARGET" ]; then
+            echo "::error::SSH_PATH is empty - refusing to deploy."
+            exit 1
+          fi
+          case "$TARGET" in */) ;; *) TARGET="$TARGET/" ;; esac
+
+          DRY=()
+          if [ "$DRY_RUN" = "true" ]; then
+            DRY=( --dry-run )
+            echo "DRY RUN - no files will be written to the server."
+          fi
+
+          SSH_CMD="ssh -p ${SSH_PORT:-{{SSH_PORT}}}"
+          DEST="${SSH_USER}@${SSH_HOST}:${TARGET}"
+
+          # A docroot can hold things the repo doesn't own: sibling sites, host tools,
+          # logs. So --delete is never rooted there. It's scoped to the directories
+          # WordPress owns outright, which protects everything else by the shape of the
+          # transfer rather than by an exclude list somebody has to remember to extend.
+          #
+          # Excludes are anchored with a leading / when they mean the docroot root. An
+          # unanchored pattern matches its basename at any depth.
+
+          # Pass 1 - root files only. "- /*/" skips every top-level directory. No --delete.
+          rsync -avz --chmod=F644 "${DRY[@]}" \
+            -f '- /*/' \
+            --exclude='.env' \
+            --exclude='auth.json' \
+            --exclude='wp-config.php' \
+            --exclude='.htaccess' \
+            --exclude='.user.ini' \
+            --exclude='php.ini' \
+            --exclude='error_log' \
+            --exclude='wp-cli.yml' \
+            --exclude='readme.html' \
+            --exclude='license.txt' \
+            {{ROOT_EXCLUDE_FLAGS}}
+            -e "$SSH_CMD" \
+            cms/ "$DEST"
+
+          # Pass 2 - core directories. PHP and the host write here too, so even
+          # "--delete inside core" keeps its hands off logs and access files.
+          for dir in wp-admin wp-includes; do
+            rsync -avz --delete --chmod=D755,F644 "${DRY[@]}" \
+              --exclude='.htaccess' \
+              --exclude='.user.ini' \
+              --exclude='php.ini' \
+              --exclude='error_log' \
+              --exclude='debug.log' \
+              -e "$SSH_CMD" \
+              "cms/$dir/" "${DEST}${dir}/"
+          done
+
+          # Pass 3 - wp-content. Patterns are relative to THIS transfer root, so they
+          # carry no "wp-content/" prefix.
+          #
+          # .gitignore excludes mu-plugins wholesale, so to rsync every mu-plugin on the
+          # server is a file the repo doesn't contain, including host-managed ones.
+          # "protect" shields them from --delete while still letting tracked files
+          # transfer, which a plain --exclude wouldn't. languages/ is the same case.
+          rsync -avz --delete --chmod=D755,F644 "${DRY[@]}" \
+            --filter='protect mu-plugins/***' \
+            --filter='protect languages/***' \
+            --exclude='.htaccess' \
+            --exclude='uploads/' \
+            --exclude='cache/' \
+            --exclude='upgrade/' \
+            --exclude='upgrade-temp-backup/' \
+            --exclude='advanced-cache.php' \
+            --exclude='object-cache.php' \
+            --exclude='db.php' \
+            --exclude='debug.log' \
+            --exclude='error_log' \
+            {{WP_CONTENT_EXCLUDE_FLAGS}}
+            -e "$SSH_CMD" \
+            cms/wp-content/ "${DEST}wp-content/"
+
+      - name: Summary
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+          ENV_URL: ${{ inputs.url }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          {
+            echo "### Deployed to $ENV_NAME (dry run: $DRY_RUN)"
+            echo ""
+            echo "- **URL:** $ENV_URL"
+            echo "- **Commit:** \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"

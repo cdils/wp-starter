@@ -1,0 +1,72 @@
+{
+    "name": "{{COMPOSER_NAME}}",
+    "description": "WordPress site for {{PROJECT_NAME}}",
+    "authors": [
+        {
+            "name": "{{AUTHOR_NAME}}",
+            "email": "{{AUTHOR_EMAIL}}"
+        }
+    ],
+    "homepage": "{{HOMEPAGE_URL}}",
+    "license": "GPL-2.0-or-later",
+    "type": "project",
+    "repositories": {
+        "wpackagist": {
+            "type": "composer",
+            "url": "https://wpackagist.org"
+        }
+    },
+    "config": {
+        "vendor-dir": "wp-content/vendor",
+        "platform": {
+            "php": "{{PHP_PLATFORM}}"
+        },
+        "preferred-install": "dist",
+        "discard-changes": true,
+        "allow-plugins": {
+            "composer/installers": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "phpstan/extension-installer": true,
+            "johnpbloch/wordpress-core-installer": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "require": {
+        "composer/installers": "^2.1",
+        "johnpbloch/wordpress-core": "{{WP_CORE_CONSTRAINT}}",
+        "johnpbloch/wordpress-core-installer": "^2.0",
+        "vlucas/phpdotenv": "^5.3"
+    },
+    "require-dev": {
+        "phpcompatibility/phpcompatibility-wp": "^2.1",
+        "phpstan/extension-installer": "^1.3",
+        "szepeviktor/phpstan-wordpress": "^2.0",
+        "wp-coding-standards/wpcs": "^3.0",
+        "wpackagist-plugin/disable-emails": "^1.8",
+        "wpackagist-plugin/query-monitor": "^4.0"
+    },
+    "scripts": {
+        "phpcs": "phpcs",
+        "phpcs:fix": "phpcbf",
+        "phpstan": "phpstan analyse --memory-limit=1G",
+        "lint": [
+            "@phpcs",
+            "@phpstan"
+        ]
+    },
+    "extra": {
+        "wordpress-install-dir": "cms",
+        "installer-paths": {
+            "wp-content/mu-plugins/{$name}/": [
+                "type:wordpress-muplugin"
+            ],
+            "wp-content/plugins/{$name}/": [
+                "type:wordpress-plugin"
+            ],
+            "wp-content/themes/{$name}/": [
+                "type:wordpress-theme"
+            ]
+        }
+    }
+}

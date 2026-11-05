@@ -1,0 +1,14 @@
+parameters:
+	level: 5
+	paths:
+@@if HAS_THEME
+		- wp-content/themes/{{THEME_NAME}}
+@@endif
+		- wp-content/mu-plugins
+	excludePaths:
+@@if HAS_THEME
+		- wp-content/themes/{{THEME_NAME}}/assets/*
+@@endif
+		- */vendor/*
+	# szepeviktor/phpstan-wordpress (auto-registered via phpstan/extension-installer)
+	# supplies WordPress core stubs, so no scanDirectories entry is needed.

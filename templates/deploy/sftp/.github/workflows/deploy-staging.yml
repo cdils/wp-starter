@@ -1,0 +1,19 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [{{STAGING_BRANCH}}]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      url: {{STAGING_URL}}
+    secrets:
+      SFTP_HOST: ${{ secrets.SFTP_STAGING_HOST }}
+      SFTP_USER: ${{ secrets.SFTP_STAGING_USER }}
+      SFTP_PASSWORD: ${{ secrets.SFTP_STAGING_PASSWORD }}
+      SFTP_PATH: ${{ secrets.SFTP_STAGING_PATH }}
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
