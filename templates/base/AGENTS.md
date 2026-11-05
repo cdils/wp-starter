@@ -187,10 +187,10 @@ Rules:
 
 1. `composer validate --strict` passes.
 2. `lando composer lint` passes (PHPCS and PHPStan on authored code).
-@ ASSETS
-3. `lando pnpm lint && lando pnpm build` succeeds. A broken webpack build fails the deploy.
-@
-4. Spin up locally with Lando and verify the site boots with no PHP notices in `wp-content/debug.log`.
+3. Spin up locally with Lando and verify the site boots with no PHP notices in `wp-content/debug.log`.
+@@if ASSETS
+4. `lando pnpm lint && lando pnpm build` succeeds. A broken webpack build fails the deploy.
+@@endif
 
 @@if HAS_STAGING
 ### After a staging deploy (before promoting to main)

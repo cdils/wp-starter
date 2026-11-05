@@ -226,6 +226,8 @@ first_commit() {
         git init -q -b "$initial"
     fi
     git add -A
+    # Global gitignores often exclude CLAUDE.md, but cloners need its AGENTS.md import.
+    if [ -f CLAUDE.md ]; then git add -f CLAUDE.md; fi
 
     local tracked
     tracked=$(git diff --cached --name-only)
