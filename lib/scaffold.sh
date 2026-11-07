@@ -15,7 +15,8 @@ ask_common() {
     git_email=$(git config user.email 2>/dev/null || true)
 
     ask AUTHOR_NAME "Author name" "${git_name:--}"
-    ask AUTHOR_EMAIL "Author email" "${git_email:--}"
+    # Required: WordPress needs it for the admin user, and composer.json for the author.
+    ask AUTHOR_EMAIL "Author email" "$git_email"
     ask GITHUB_OWNER "GitHub username or organization" "cdils"
     ask GITHUB_REPO "GitHub repository name" "$PROJECT_NAME"
 }
@@ -175,9 +176,7 @@ require_auth_json() {
     if [ "$NONINTERACTIVE" = false ]; then
         read_line source "Path to an auth.json to copy (Enter to stop and add it yourself): "
     fi
-    case "$source" in
-        "~/"*) source="$HOME/${source#\~/}" ;;
-    esac
+    source=$(abs_path "$source")
     [ -n "$source" ] || die "Add auth.json to this folder, then resume."
     [ -f "$source" ] || die "Not found: $source"
     cp "$source" auth.json
@@ -264,12 +263,13 @@ create_github_repo() {
 print_deploy_checklist() {
     [ "$DEPLOY" = true ] || return 0
     printf "\n${YELLOW}Before the first deploy:${NC}\n"
-    info "  1. Add these GitHub secrets: $SECRET_NAMES"
-    info "  2. Create the environments, and add a required reviewer to production."
+    info "  1. Create the environments, and add a required reviewer to production."
+    info "  2. Add the secrets: $SECRET_NAMES"
     if [ "$TRANSPORT" = rsync ]; then
         info "  3. Run the deploy workflow by hand with dry_run on, and read the file list."
     else
         info "  3. List what's on the server first: anything host-managed that the repo lacks needs an exclude."
     fi
     info "  4. Check the docroot has its own wp-config.php. Deploys never ship one."
+    info "  5. Then set the repository variable DEPLOY_ENABLED to true. Until then, pushes don't deploy."
 }

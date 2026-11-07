@@ -21,7 +21,8 @@ while [ -L "$SOURCE" ]; do
     case "$SOURCE" in /*) ;; *) SOURCE="$LINK_DIR/$SOURCE" ;; esac
 done
 STARTER_ROOT=$(cd -P "$(dirname "$SOURCE")" && pwd)
-export STARTER_ROOT
+START_DIR="$PWD"
+export STARTER_ROOT START_DIR
 
 # shellcheck source=versions.env
 . "$STARTER_ROOT/versions.env"

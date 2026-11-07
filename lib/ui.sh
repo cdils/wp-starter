@@ -20,7 +20,7 @@ heading() {
 
 is_set() { eval "[ -n \"\${$1+x}\" ]"; }
 
-# Prompts read from the terminal so they still work if stdin is used by a pipe.
+# Fails cleanly when there's no input, such as an unattended run without --config.
 read_line() {
     local __var="$1" __prompt="$2" __reply=""
     if ! read -r -p "$__prompt" __reply; then
@@ -140,7 +140,18 @@ confirm() {
         return 1
     fi
     read_line reply "$1 [y/N]: "
-    [[ "$reply" =~ ^[Yy]$ ]]
+    [[ "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+# Typed paths: expands ~, and anchors relative paths to where the wizard started,
+# since it changes into the project folder before using them.
+abs_path() {
+    case "$1" in
+        ""|/*|*://*) printf '%s' "$1" ;;
+        "~") printf '%s' "$HOME" ;;
+        "~/"*) printf '%s' "$HOME/${1#\~/}" ;;
+        *) printf '%s' "${START_DIR:-$PWD}/$1" ;;
+    esac
 }
 
 valid_slug() {

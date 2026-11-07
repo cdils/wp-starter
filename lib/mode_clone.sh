@@ -35,6 +35,8 @@ run_clone() {
     PROJECT_NAME="${PROJECT_NAME:-$PROJECT_FOLDER}"
     export PROJECT_NAME
     remember PROJECT_NAME
+    # A generated composer.json needs a valid package name and author.
+    if [ "$NEEDS_SCAFFOLD" = true ]; then ask_common; fi
 
     ask_choice DB_SOURCE "Where should the database come from?" \
         fresh "A fresh install" \
@@ -42,7 +44,10 @@ run_clone() {
         ssh "A server, over SSH" \
         skip "Skip for now"
     case "$DB_SOURCE" in
-        dump) ask SQL_PATH "Path to the .sql or .sql.gz file"; ;;
+        dump)
+            ask SQL_PATH "Path to the .sql or .sql.gz file"
+            SQL_PATH=$(abs_path "$SQL_PATH")
+            ;;
         ssh) ask_ssh_source ;;
         fresh)
             ask ADMIN_USER "WordPress admin username" "admin"
@@ -76,7 +81,7 @@ stage_fill_gaps() {
     render_overlay "$STARTER_ROOT/templates/base" . keep
     if [ -d wp-content/plugins ] || [ -d wp-content/themes ]; then
         if [ "$NONINTERACTIVE" = true ] || confirm "Run wp-composerize now?"; then
-            "$STARTER_ROOT/bin/wp-composerize.sh"
+            stage_composerize
         fi
     fi
 }
@@ -102,12 +107,14 @@ stage_clone_db() {
             ;;
         ssh)
             pull_db_ssh
+            sync_table_prefix
             import_dump
             OLD_URL=$(dump_home_url)
             replace_urls
             disable_outbound_email
             ;;
         dump)
+            sync_table_prefix
             import_dump
             OLD_URL=$(dump_home_url)
             replace_urls
@@ -131,6 +138,9 @@ stages_clone() {
     local url
     url=$(sed -nE 's/^WP_HOME="?([^"]+)"?.*/\1/p' .env.example 2>/dev/null | head -n1)
     ok "Site: ${url:-$DEV_URL}"
+    if [ "$DB_SOURCE" = fresh ]; then
+        warn "Fresh database: no theme is active yet. Run: lando wp theme activate <theme>"
+    fi
     rm -f "$STATE_FILE" "$ANSWERS_FILE"
     [ -z "$(git status --porcelain)" ] || warn "Setup changed tracked files. Check 'git status' before committing."
 }

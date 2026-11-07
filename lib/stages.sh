@@ -33,6 +33,9 @@ on_stage_exit() {
     warn "Stopped during: ${CURRENT_STAGE:-setup}"
     warn "Fix the problem, then run this from $PWD:"
     printf "  %s resume\n" "$STARTER_ROOT/wp-project.sh"
+    if [ -n "${DUMP_DIR:-}" ] && [ -d "$DUMP_DIR" ]; then
+        warn "A database copy is still in $DUMP_DIR. Resuming removes it at the end; if you give up, delete it."
+    fi
 }
 
 # run_stage "Label" function

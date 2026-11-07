@@ -1,8 +1,9 @@
 # Getting files and databases from somewhere else. Dumps can hold personal data, so they
 # stay in a private temp directory outside the project and are removed when setup ends.
 
-PULL_EXCLUDES=(--exclude=uploads/ --exclude=cache/ --exclude=upgrade/ --exclude=upgrade-temp-backup/
-    --exclude=ai1wm-backups/ --exclude=updraft/ --exclude=debug.log --exclude=error_log)
+# Anchored to wp-content: plugins and themes have their own cache/ and uploads/ folders.
+PULL_EXCLUDES=(--exclude=/uploads/ --exclude=/cache/ --exclude=/upgrade/ --exclude=/upgrade-temp-backup/
+    --exclude=/ai1wm-backups/ --exclude=/updraft/ --exclude=debug.log --exclude=error_log)
 
 ask_ssh_source() {
     ask SSH_TARGET "SSH target (user@host, or an alias from ~/.ssh/config)"
@@ -22,6 +23,8 @@ make_dump_dir() {
         chmod 700 "$DUMP_DIR"
         export DUMP_DIR
         remember DUMP_DIR
+        # Saved now, so a resume reuses and later removes this folder instead of orphaning it.
+        save_answers
     fi
 }
 
@@ -74,8 +77,21 @@ pull_files_backup() {
 }
 
 # Read from the dump itself: wp-config's WP_HOME overrides the home option once imported.
+# usermeta, not options: plugins add tables like wp_aioseo_options, and multisite adds wp_2_options.
 dump_table_prefix() {
-    gzip -cdf "$SQL_PATH" | perl -ne 'if (/CREATE TABLE `?(\w*?)options`?/) { print $1; exit }' || true
+    gzip -cdf "$SQL_PATH" | perl -ne 'if (/CREATE TABLE `?(\w*?)usermeta`?/) { print $1; exit }' || true
+}
+
+# A repo's .env.example can assume a different prefix than the dump uses.
+sync_table_prefix() {
+    local prefix
+    prefix=$(dump_table_prefix)
+    [ -n "$prefix" ] || return 0
+    if grep -q '^DB_TABLE_PREFIX=' .env; then
+        PREFIX="$prefix" perl -pi -e 's/^DB_TABLE_PREFIX=.*/DB_TABLE_PREFIX="$ENV{PREFIX}"/' .env
+    elif [ "$prefix" != wp_ ]; then
+        warn "The dump uses the table prefix '$prefix'. Set it wherever this repo's wp-config.php reads it."
+    fi
 }
 
 dump_home_url() {

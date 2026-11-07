@@ -41,10 +41,7 @@ valid_parent_theme() {
 ask_theme_source() {
     while true; do
         ask THEME_SOURCE "Theme starter: zip, folder or URL (blank to scaffold one)" "-"
-        case "$THEME_SOURCE" in
-            "~") THEME_SOURCE="$HOME" ;;
-            "~/"*) THEME_SOURCE="$HOME/${THEME_SOURCE#\~/}" ;;
-        esac
+        THEME_SOURCE=$(abs_path "$THEME_SOURCE")
         if [ -z "$THEME_SOURCE" ] || [[ "$THEME_SOURCE" =~ ^https?:// ]] || [ -e "$THEME_SOURCE" ]; then
             break
         elif [ -e "${THEME_SOURCE}.zip" ]; then
@@ -222,13 +219,18 @@ stage_install_wp() {
     local password
     password=$(openssl rand -base64 18 | tr -d '/+=')
 
-    lando wp core install \
-        --url="$DEV_URL" \
-        --title="$SITE_TITLE" \
-        --admin_user="$ADMIN_USER" \
-        --admin_password="$password" \
-        --admin_email="$AUTHOR_EMAIL" \
-        --skip-email
+    if lando wp core is-installed >/dev/null 2>&1; then
+        # A resumed run: core install would keep the old password, never shown, so reset it.
+        lando wp user update "$ADMIN_USER" --user_pass="$password" --skip-email
+    else
+        lando wp core install \
+            --url="$DEV_URL" \
+            --title="$SITE_TITLE" \
+            --admin_user="$ADMIN_USER" \
+            --admin_password="$password" \
+            --admin_email="$AUTHOR_EMAIL" \
+            --skip-email
+    fi
     lando wp rewrite structure '/%postname%/'
     if [ "$THEME_KIND" != none ]; then
         lando wp theme activate "$THEME_NAME"

@@ -17,7 +17,9 @@ run_adopt() {
         ask_ssh_source
     else
         ask BACKUP_PATH "Backup folder or .zip containing wp-content"
+        BACKUP_PATH=$(abs_path "$BACKUP_PATH")
         ask SQL_PATH "Path to the .sql or .sql.gz (blank to find it in the backup)" "-"
+        SQL_PATH=$(abs_path "$SQL_PATH")
     fi
 
     MODE=adopt
@@ -119,14 +121,21 @@ stage_composerize() {
 
 # Composer can only install over a clean path, but anything composer.json doesn't
 # require has no other copy, so only confirmed Composer-managed entries are removed.
+# Matched against require and require-dev only: the project's own name can share a slug.
 stage_remove_managed() {
     local -a managed=()
-    local path slug
+    local path slug required
+    required=$(php -r '
+        $j = json_decode( file_get_contents( "composer.json" ), true );
+        foreach ( array_merge( $j["require"] ?? array(), $j["require-dev"] ?? array() ) as $name => $c ) {
+            echo $name, "\n";
+        }')
     while IFS= read -r path; do
         slug=$(basename "$path" .php)
         [ "$path" = "wp-content/themes/${THEME_NAME:-}" ] && continue
         [ "$slug" = index ] && continue
-        if grep -qE "\"[^\"]+/${slug}\"" composer.json; then
+        if printf '%s\n' "$required" | grep -qxF -e "wpackagist-plugin/$slug" -e "wpackagist-theme/$slug" \
+            || printf '%s\n' "$required" | grep -qE "^[^/]+/${slug}\$"; then
             managed+=("$path")
         fi
     done < <(find wp-content/plugins wp-content/mu-plugins wp-content/themes -mindepth 1 -maxdepth 1 2>/dev/null | sort)
