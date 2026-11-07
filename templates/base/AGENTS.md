@@ -70,7 +70,12 @@ Never push directly to `{{PROD_BRANCH}}`.
 
 Deploys to **{{HOST_LABEL}}**. {{DEPLOY_SUMMARY}}
 
-Host names, users, paths and keys live in GitHub Actions **secrets**, bound to GitHub environments, never in this repo. Don't add them to this file. For SSH access, use a `Host` alias in your own `~/.ssh/config`; the examples below call it `{{SSH_ALIAS}}`.
+Host names, users, paths and keys live in GitHub Actions **secrets** on each GitHub environment, never in this repo. Don't add them to this file.
+@@if HAS_SSH
+For SSH access, use `Host` aliases in your own `~/.ssh/config`. The examples below use {{SSH_ALIAS_LIST}}.
+@@endif
+
+Deploys run only while the repository variable `DEPLOY_ENABLED` is `true`. Set it to anything else to pause them.
 
 Required secrets: {{SECRET_NAMES}}
 @@endif
@@ -134,8 +139,7 @@ manual:
 
 **The trap to avoid:** running WordPress's built-in updater on the server
 updates the plugin *on the server only*. The git copy is now behind, and
-the next deploy's `rsync --delete` will **downgrade the plugin in
-production**. Auto-updates must stay disabled for git-committed plugins;
+the next deploy will **downgrade the plugin in production**. Auto-updates must stay disabled for git-committed plugins;
 every update flows through the repo.
 
 ### Update cadence: stages, not batches
@@ -157,7 +161,7 @@ breaks the site tells you nothing about which plugin broke it.
 Staged commits mean a broken update is one `git revert` — not an
 archaeology dig through a 40-file lockfile diff.
 
-@@if DEPLOY
+@@if HAS_SSH
 ## Logged-in QA: WP-CLI magic links
 
 Testing the logged-in experience (dashboard, admin screens, form entries,
@@ -185,7 +189,7 @@ Rules:
 
 ### Before opening a PR
 
-1. `composer validate --strict` passes.
+1. `lando composer validate --strict --no-check-all` passes (the same check CI runs).
 2. `lando composer lint` passes (PHPCS and PHPStan on authored code).
 3. Spin up locally with Lando and verify the site boots with no PHP notices in `wp-content/debug.log`.
 @@if ASSETS
@@ -193,33 +197,46 @@ Rules:
 @@endif
 
 @@if HAS_STAGING
-### After a staging deploy (before promoting to main)
+### After a staging deploy (before promoting to {{PROD_BRANCH}})
 
-1. **Deploy check**: the `Deploy staging` run is green; the rsync step completed.
+1. **Deploy check**: the `Deploy staging` run is green; the deploy step completed.
+@@if HAS_SSH
 2. **Smoke over SSH** (Cloudflare-style bot protection can 403 curl, so verify on the box, not over HTTP):
    ```
-   ssh {{SSH_ALIAS}} "cd <docroot> && wp core verify-checksums && wp option get home && wp plugin list --update=available"
+   ssh {{SSH_ALIAS_STAGING}} "cd <docroot> && wp core verify-checksums && wp option get home && wp plugin list --update=available"
    ```
+@@endif
+@@if !HAS_SSH
+2. **Smoke in wp-admin**: Dashboard → Updates shows the expected versions, and Site Health shows no new critical issues.
+@@endif
 3. **Full in-browser QA** — see the checklist below. This is not optional and cannot be replaced by curl or HTTP status checks.
-4. **Regression check on excluded paths**: uploads still present (rsync `--delete` must never touch `wp-content/uploads/`), server `wp-config.php` untouched.
+4. **Regression check on excluded paths**: uploads still present (the deploy's `--delete` must never touch `wp-content/uploads/`), server `wp-config.php` untouched.
 5. **Accessibility spot check**: `npx @axe-core/cli {{STAGING_URL}} --tags wcag2a,wcag2aa`.
 
 @@endif
 @@if DEPLOY
 ### After a production deploy
 
-Repeat the SSH smoke check against `{{SSH_ALIAS}}`, then run the
+@@if HAS_SSH
+Run the SSH smoke check (as for staging: `wp core verify-checksums`, `wp option get home`)
+against `{{SSH_ALIAS_PRODUCTION}}`, then run the
+@@endif
+@@if !HAS_SSH
+Check wp-admin on production (Dashboard → Updates shows the expected versions, Site
+Health shows no new critical issues), then run the
+@@endif
 critical-path browser checklist (at minimum: homepage, one form
 end-to-end, one logged-in dashboard screen). If anything is wrong,
-redeploy the previous commit (`git revert` + push to `main`) — the
-pipeline is the rollback mechanism; never hot-edit files on the server.
+redeploy the previous commit (`git revert`, merged to `{{PROD_BRANCH}}`
+through a PR): the pipeline is the rollback mechanism; never hot-edit
+files on the server.
 
 @@endif
 ## In-browser QA checklist
 
 Run this in a **real browser** (not curl — bot protection, JS-rendered
 markup, and form tokens all behave differently). Test the environment you
-just deployed to, logged out first, then logged in via a magic link.
+just deployed to, logged out first, then logged in.
 
 ### Why a browser is required
 
@@ -232,7 +249,7 @@ just deployed to, logged out first, then logged in via a magic link.
 1. **Homepage** — renders with styles, no console errors, no mixed-content warnings.
 2. **One of each template type** — post, page, archive, search results, 404. Watch the console on each.
 3. **Navigation** — primary menu works on desktop AND at a mobile viewport width (hamburger opens, links navigate).
-4. **`/wp-admin` via magic link** — dashboard loads with no plugin error notices; open the settings screen of any plugin updated in this release.
+4. **`/wp-admin`** — dashboard loads with no plugin error notices; open the settings screen of any plugin updated in this release.
 
 ### Forms — full end-to-end, every form that matters
 
@@ -248,7 +265,7 @@ For each critical form:
 2. **Client-side validation**: submit empty → required-field errors appear inline. Enter a malformed email → rejected before submission.
 3. **Conditional logic**: if the form shows/hides fields based on answers, exercise each branch.
 4. **Successful submission**: fill with obviously-fake-but-valid test data (name like `QA Test — <date>`, email you control) and submit. Confirm the success state: confirmation message, or redirect to the thank-you page — whichever the form is configured for.
-5. **The entry actually arrived**: check the plugin's entries screen in wp-admin (magic link) — the submission is stored with every field intact.
+5. **The entry actually arrived**: check the plugin's entries screen in wp-admin — the submission is stored with every field intact.
 6. **Notifications sent**: the admin notification email AND any user-facing autoresponder arrived (check the SMTP plugin's log if it has one). Email is the most common silent failure — the form "works" but nobody is notified.
 7. **Spam protection intact**: the Turnstile/reCAPTCHA widget renders; a submission completes normally with it present. If JS is combined/minified by a cache plugin, this is where it breaks first.
 8. **Multi-step/payment forms**: complete every step; for payment forms use the gateway's test mode and confirm the transaction appears in the gateway dashboard.
@@ -259,7 +276,7 @@ Repeat step 4 once at a mobile viewport — touch targets, keyboard type, and st
 
 ### Logged-in experience
 
-Via magic link (see above), as the lowest-privileged relevant role:
+Logged in as the lowest-privileged relevant role:
 
 1. Dashboard loads without notices or fatal admin-ajax errors in the console.
 2. Any front-end account/dashboard pages render with correct user data.
@@ -278,7 +295,7 @@ The in-browser pass above is scoped by what changed:
 | Caching/optimization plugin | Forms checklist steps 1, 4, 7 (JS combining breaks form JS first) + styles intact logged-out |
 | Theme or parent theme | Every template type + navigation + one form render |
 | WordPress core | Full critical-path list + full forms checklist + logged-in pass |
-| Security/login plugin | Log in, log out, magic link still works, no admin lockout |
+| Security/login plugin | Log in, log out, magic links still work if you use them, no admin lockout |
 
 ## Hard rules for agents
 

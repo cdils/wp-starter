@@ -125,8 +125,9 @@ jobs:
 
           # An empty TARGET would make the destination "user@host:", which rsync reads
           # as the account's home directory, and --delete would run against it.
-          if [ -z "$TARGET" ]; then
-            echo "::error::SSH_PATH is empty - refusing to deploy."
+          # required: true only checks the secret is passed, not that it has a value.
+          if [ -z "$TARGET" ] || [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
+            echo "::error::SSH_HOST, SSH_USER or SSH_PATH is empty for this environment - refusing to deploy."
             exit 1
           fi
           case "$TARGET" in */) ;; *) TARGET="$TARGET/" ;; esac
@@ -179,23 +180,24 @@ jobs:
           done
 
           # Pass 3 - wp-content. Patterns are relative to THIS transfer root, so they
-          # carry no "wp-content/" prefix.
+          # carry no "wp-content/" prefix. Drop-ins and host folders are anchored: plugins
+          # ship their own db.php, cache/ and fonts/, and those must deploy.
           #
           # .gitignore excludes mu-plugins wholesale, so to rsync every mu-plugin on the
           # server is a file the repo doesn't contain, including host-managed ones.
           # "protect" shields them from --delete while still letting tracked files
           # transfer, which a plain --exclude wouldn't. languages/ is the same case.
           rsync -avz --delete --chmod=D755,F644 "${DRY[@]}" \
-            --filter='protect mu-plugins/***' \
-            --filter='protect languages/***' \
+            --filter='protect /mu-plugins/***' \
+            --filter='protect /languages/***' \
             --exclude='.htaccess' \
-            --exclude='uploads/' \
-            --exclude='cache/' \
-            --exclude='upgrade/' \
-            --exclude='upgrade-temp-backup/' \
-            --exclude='advanced-cache.php' \
-            --exclude='object-cache.php' \
-            --exclude='db.php' \
+            --exclude='/uploads/' \
+            --exclude='/cache/' \
+            --exclude='/upgrade/' \
+            --exclude='/upgrade-temp-backup/' \
+            --exclude='/advanced-cache.php' \
+            --exclude='/object-cache.php' \
+            --exclude='/db.php' \
             --exclude='debug.log' \
             --exclude='error_log' \
             {{WP_CONTENT_EXCLUDE_FLAGS}}

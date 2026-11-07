@@ -15,6 +15,9 @@ on:
 
 jobs:
   deploy:
+    # Off until the DEPLOY_ENABLED repository variable is true, so the first push can't deploy.
+    # A dry run works before that.
+    if: vars.DEPLOY_ENABLED == 'true' || inputs.dry_run == true
     uses: ./.github/workflows/deploy.yml
     with:
       environment: production

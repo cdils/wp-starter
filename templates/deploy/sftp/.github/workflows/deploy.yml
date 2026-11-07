@@ -56,6 +56,18 @@ jobs:
       name: ${{ inputs.environment }}
       url: ${{ inputs.url }}
     steps:
+      # required: true only checks the secret is passed, not that it has a value.
+      - name: Check secrets
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_USER: ${{ secrets.SFTP_USER }}
+          SFTP_PATH: ${{ secrets.SFTP_PATH }}
+        run: |
+          if [ -z "$SFTP_HOST" ] || [ -z "$SFTP_USER" ] || [ -z "$SFTP_PATH" ]; then
+            echo "::error::SFTP_HOST, SFTP_USER or SFTP_PATH is empty for this environment - refusing to deploy."
+            exit 1
+          fi
+
 {{BUILD_STEPS}}
 
       - name: Assemble release

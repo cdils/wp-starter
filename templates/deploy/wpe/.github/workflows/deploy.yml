@@ -1,7 +1,8 @@
 # Reusable build-and-deploy pipeline for WP Engine, using WP Engine's official action.
 #
 # wpe_env is the install name, not a secret. FLAGS replace the action's defaults, so
-# -azvr must stay. Platform and cache plugins in mu-plugins are protected from --delete.
+# -azvr must stay. mu-plugins (platform and cache plugins) and languages are protected
+# from --delete. Excludes start with / so they only match at the docroot.
 
 name: Build & Deploy
 
@@ -73,5 +74,5 @@ jobs:
           WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
           WPE_ENV: ${{ inputs.wpe_env }}
           SRC_PATH: "cms/"
-          FLAGS: -azvr --delete --filter='protect wp-content/mu-plugins/***' --exclude=wp-config.php --exclude=.htaccess --exclude=wp-content/uploads/ --exclude=wp-content/cache/{{WP_CONTENT_EXCLUDE_WPE}}{{ROOT_EXCLUDE_WPE}}
+          FLAGS: -azvr --delete --filter='protect /wp-content/mu-plugins/***' --filter='protect /wp-content/languages/***' --exclude=/wp-config.php --exclude=.htaccess --exclude=/wp-content/uploads/ --exclude=/wp-content/cache/{{WP_CONTENT_EXCLUDE_WPE}}{{ROOT_EXCLUDE_WPE}}
           CACHE_CLEAR: TRUE

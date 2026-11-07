@@ -7,6 +7,8 @@ on:
 
 jobs:
   deploy:
+    # Off until the DEPLOY_ENABLED repository variable is true, so the first push can't deploy.
+    if: vars.DEPLOY_ENABLED == 'true'
     uses: ./.github/workflows/deploy.yml
     with:
       environment: staging

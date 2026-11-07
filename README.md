@@ -51,11 +51,13 @@ ROOT_EXCLUDES=''       # docroot files the host owns, space-separated
 WP_CONTENT_EXCLUDES='' # paths in wp-content the host owns
 ```
 
-Before relying on a new preset, list what's on the server. Anything host-managed that the repo lacks must be excluded, or the deploy will delete it. `mu-plugins` and `languages` are protected for every rsync host.
+Before relying on a new preset, list what's on the server. Anything host-managed that the repo lacks must be excluded, or the deploy will delete it. `mu-plugins` and `languages` are protected for every rsync host and for WP Engine. Preset excludes match only at the root of their transfer.
 
 ## How the rsync deploy stays safe
 
 `--delete` is never rooted at the docroot, because a docroot can hold sibling sites, host tools and logs. It runs in three passes: root files with no delete, then `wp-admin` and `wp-includes`, then `wp-content`. Run the deploy workflow by hand with `dry_run` before the first real deploy.
+
+No deploy workflow runs until the repository variable `DEPLOY_ENABLED` is `true`, so pushing a new repo can't deploy. A `dry_run` works before that. Secrets use the same names in each GitHub environment; the reusable workflow's job picks the right set.
 
 ## Answering from a file
 

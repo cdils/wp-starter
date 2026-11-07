@@ -80,7 +80,7 @@ Deploys to **{{HOST_LABEL}}** through GitHub Actions. {{DEPLOY_SUMMARY}}
 
 Required secrets: {{SECRET_NAMES}}
 
-Create `production`{{STAGING_ENV_NOTE}} under Settings → Environments, and add a required reviewer to `production`.
+Create `production`{{STAGING_ENV_NOTE}} under Settings → Environments, and add a required reviewer to `production`. Deploys stay off until the repository variable `DEPLOY_ENABLED` is `true`.
 
 @@endif
 @@if !DEPLOY
