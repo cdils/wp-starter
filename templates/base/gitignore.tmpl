@@ -1,5 +1,11 @@
 # ignore everything except premium plugins and code we are responsible for.
 /cms/
+# Anything else in wp-content (backups, media, drop-ins, plugin data) stays out of git.
+# Some of it holds secrets, like security plugins' key files and wp-config backups.
+/wp-content/*
+!/wp-content/mu-plugins/
+!/wp-content/plugins/
+!/wp-content/themes/
 /wp-content/mu-plugins/*
 /wp-content/plugins/*
 /wp-content/themes/*

@@ -74,5 +74,5 @@ jobs:
           WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
           WPE_ENV: ${{ inputs.wpe_env }}
           SRC_PATH: "cms/"
-          FLAGS: -azvr --delete --filter='protect /wp-content/mu-plugins/***' --filter='protect /wp-content/languages/***' --exclude=/wp-config.php --exclude=.htaccess --exclude=/wp-content/uploads/ --exclude=/wp-content/cache/{{WP_CONTENT_EXCLUDE_WPE}}{{ROOT_EXCLUDE_WPE}}
+          FLAGS: -azvr --delete --filter='risk /wp-content/plugins/***' --filter='risk /wp-content/themes/***' --filter='protect /wp-content/***' --exclude=/wp-config.php --exclude=.htaccess --exclude=/wp-content/uploads/ --exclude=/wp-content/cache/{{WP_CONTENT_EXCLUDE_WPE}}{{ROOT_EXCLUDE_WPE}}
           CACHE_CLEAR: TRUE

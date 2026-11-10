@@ -74,7 +74,7 @@ derive_deploy_tokens() {
     fi
 
     export HOST_LABEL="" TRANSPORT="" SSH_PORT="22" SECRET_NAMES="" DEPLOY_SUMMARY="" HAS_SSH=false
-    export ROOT_EXCLUDE_FLAGS="" WP_CONTENT_EXCLUDE_FLAGS="" WP_CONTENT_EXCLUDE_MIRROR=""
+    export ROOT_EXCLUDE_FLAGS="" WP_CONTENT_EXCLUDE_FLAGS=""
     export WP_CONTENT_EXCLUDE_WPE="" ROOT_EXCLUDE_WPE="" BUILD_STEPS=""
 
     [ "$DEPLOY" = true ] || return 0
@@ -84,21 +84,24 @@ derive_deploy_tokens() {
     local ROOT_EXCLUDES="" WP_CONTENT_EXCLUDES=""
     # shellcheck disable=SC1090
     . "$preset"
+    # The SFTP deploy mirrors plugins/ and themes/ as separate jobs, with no exclude hook.
+    if [ "$TRANSPORT" = sftp ] && [ -n "$WP_CONTENT_EXCLUDES" ]; then
+        die "$preset sets WP_CONTENT_EXCLUDES, which the SFTP deploy can't apply."
+    fi
 
     ROOT_EXCLUDE_FLAGS=$(rsync_flags "$ROOT_EXCLUDES")
     WP_CONTENT_EXCLUDE_FLAGS=$(rsync_flags "$WP_CONTENT_EXCLUDES")
-    WP_CONTENT_EXCLUDE_MIRROR=$(prefixed_flags "'" "$WP_CONTENT_EXCLUDES" "'^")
     WP_CONTENT_EXCLUDE_WPE=$(prefixed_flags "" "$WP_CONTENT_EXCLUDES" "/wp-content/")
     ROOT_EXCLUDE_WPE=$(prefixed_flags "" "$ROOT_EXCLUDES" "/")
 
     case "$TRANSPORT" in
         rsync)
-            DEPLOY_SUMMARY="rsync over SSH in three passes, with \`--delete\` scoped to \`wp-admin\`, \`wp-includes\` and \`wp-content\`. The server keeps its own \`wp-config.php\`. Run the deploy workflow by hand with \`dry_run\` to rehearse."
+            DEPLOY_SUMMARY="rsync over SSH in three passes, with \`--delete\` scoped to \`wp-admin\`, \`wp-includes\`, and the \`plugins\` and \`themes\` folders of \`wp-content\`. The server keeps its own \`wp-config.php\`. Run the deploy workflow by hand with \`dry_run\` to rehearse."
             SECRET_NAMES="\`SSH_HOST\`, \`SSH_USER\`, \`SSH_PATH\`, \`SSH_PORT\`, \`SSH_PRIVATE_KEY\`. Optional: \`SSH_KNOWN_HOSTS\` to pin the host key."
             HAS_SSH=true
             ;;
         sftp)
-            DEPLOY_SUMMARY="SFTP mirror of \`wp-content\` only. WordPress core on the server is not managed by Composer, so it updates separately, and composer.lock's core version may not match production."
+            DEPLOY_SUMMARY="SFTP mirror of \`wp-content/plugins\` and \`wp-content/themes\` only. WordPress core on the server is not managed by Composer, so it updates separately, and composer.lock's core version may not match production."
             SECRET_NAMES="\`SFTP_HOST\`, \`SFTP_USER\`, \`SFTP_PASSWORD\`, \`SFTP_PATH\`."
             ;;
         wpe)

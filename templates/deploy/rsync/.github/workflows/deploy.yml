@@ -183,13 +183,15 @@ jobs:
           # carry no "wp-content/" prefix. Drop-ins and host folders are anchored: plugins
           # ship their own db.php, cache/ and fonts/, and those must deploy.
           #
-          # .gitignore excludes mu-plugins wholesale, so to rsync every mu-plugin on the
-          # server is a file the repo doesn't contain, including host-managed ones.
-          # "protect" shields them from --delete while still letting tracked files
-          # transfer, which a plain --exclude wouldn't. languages/ is the same case.
+          # The repo owns plugins/ and themes/, so only those see --delete. Everything
+          # else in wp-content is the server's: media folders, mu-plugins the repo doesn't
+          # track, languages, and plugin key files whose loss breaks things like 2FA.
+          # "protect" shields it from --delete while tracked files still transfer, which a
+          # plain --exclude wouldn't. The first matching rule wins, so "risk" comes first.
           rsync -avz --delete --chmod=D755,F644 "${DRY[@]}" \
-            --filter='protect /mu-plugins/***' \
-            --filter='protect /languages/***' \
+            --filter='risk /plugins/***' \
+            --filter='risk /themes/***' \
+            --filter='protect /***' \
             --exclude='.htaccess' \
             --exclude='/uploads/' \
             --exclude='/cache/' \

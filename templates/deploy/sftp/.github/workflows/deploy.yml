@@ -81,9 +81,11 @@ jobs:
             -prune -exec rm -rf {} +
           find deploy \( -name '.env' -o -name '.env.*' -o -name 'id_rsa*' -o -name '*.pem' -o -name 'auth.json' \) -delete
 
-      # sync: full mirrors deletions, so everything the host owns is excluded.
-      # mu-plugins is excluded whole: managed hosts keep their own plugins there.
-      - name: Deploy via SFTP
+      # sync: full mirrors deletions. The repo owns only plugins/ and themes/, so each is
+      # mirrored on its own and the mirror never sees the rest of wp-content: media
+      # folders, host mu-plugins, languages, and plugin key files. lftp include rules
+      # can't scope one mirror instead, because it deletes the folders they leave out.
+      - name: Deploy plugins via SFTP
         uses: {{ACTION_SFTP}}
         with:
           remote-protocol: sftp
@@ -91,7 +93,18 @@ jobs:
           remote-port: {{SSH_PORT}}
           remote-user: ${{ secrets.SFTP_USER }}
           remote-password: ${{ secrets.SFTP_PASSWORD }}
-          local-path: deploy
-          remote-path: ${{ secrets.SFTP_PATH }}
+          local-path: deploy/plugins
+          remote-path: ${{ secrets.SFTP_PATH }}/plugins
           sync: full
-          ftp-mirror-options: --exclude='^uploads/' --exclude='^cache/' --exclude='^upgrade/' --exclude='^upgrade-temp-backup/' --exclude='^mu-plugins/' --exclude='^languages/'{{WP_CONTENT_EXCLUDE_MIRROR}}
+
+      - name: Deploy themes via SFTP
+        uses: {{ACTION_SFTP}}
+        with:
+          remote-protocol: sftp
+          remote-host: ${{ secrets.SFTP_HOST }}
+          remote-port: {{SSH_PORT}}
+          remote-user: ${{ secrets.SFTP_USER }}
+          remote-password: ${{ secrets.SFTP_PASSWORD }}
+          local-path: deploy/themes
+          remote-path: ${{ secrets.SFTP_PATH }}/themes
+          sync: full

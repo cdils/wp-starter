@@ -91,7 +91,7 @@ If the failure message mentioned a database copy in a temporary folder, delete t
 | `wpengine` | WP Engine action | Asks for install names |
 | `siteground` | rsync | Port 18765, SG plugins excluded |
 | `hostgator` | rsync | Port 2222, host plugins excluded |
-| `godaddy`, `sftp` | SFTP | `wp-content` only; server core isn't managed by Composer |
+| `godaddy`, `sftp` | SFTP | `wp-content/plugins` and `themes` only; server core isn't managed by Composer |
 | `ssh` | rsync | Any host with SSH |
 
 **To add a host,** create one file in `templates/deploy/hosts/`. That's all, apart from adding it to the menu in `lib/deploy.sh`.
@@ -104,11 +104,11 @@ ROOT_EXCLUDES=''       # docroot files the host owns, space-separated
 WP_CONTENT_EXCLUDES='' # paths in wp-content the host owns
 ```
 
-Before relying on a new preset, list what's on the server. Anything host-managed that the repo lacks must be excluded, or the deploy will delete it. `mu-plugins` and `languages` are protected for every rsync host and for WP Engine. Preset excludes match only at the root of their transfer.
+Before relying on a new preset, list what's on the server. Deploys only delete inside `wp-content/plugins` and `wp-content/themes`, the folders the repo owns. Everything else in `wp-content` (media folders, mu-plugins the repo doesn't track, `languages`, plugin key files) is left alone, for every transport. Host-managed plugins inside `plugins/` still need excluding in the preset, or the deploy will delete them. Preset excludes match only at the root of their transfer.
 
 ## How the rsync deploy stays safe
 
-`--delete` is never rooted at the docroot, because a docroot can hold sibling sites, host tools and logs. It runs in three passes: root files with no delete, then `wp-admin` and `wp-includes`, then `wp-content`. Run the deploy workflow by hand with `dry_run` before the first real deploy.
+`--delete` is never rooted at the docroot, because a docroot can hold sibling sites, host tools and logs. It runs in three passes: root files with no delete, then `wp-admin` and `wp-includes`, then `wp-content`, where only `plugins/` and `themes/` see deletions. Run the deploy workflow by hand with `dry_run` before the first real deploy.
 
 No deploy workflow runs until the repository variable `DEPLOY_ENABLED` is `true`, so pushing a new repo can't deploy. A `dry_run` works before that. Secrets use the same names in each GitHub environment; the reusable workflow's job picks the right set.
 
