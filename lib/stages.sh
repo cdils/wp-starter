@@ -127,6 +127,26 @@ preflight() {
     case " $* " in
         *" lando "*)
             docker info >/dev/null 2>&1 || die "Docker isn't running. Start it and try again."
+            # The generated .lando.yml uses the mailpit service, bundled from Lando 3.21.
+            check_version Lando "$(lando version 2>/dev/null)" 3 21
             ;;
     esac
+    case " $* " in
+        *" composer "*) check_version Composer "$(composer --version 2>/dev/null)" 2 0 ;;
+    esac
+}
+
+# check_version Name "version output" major minor: an unreadable version only warns,
+# since output formats change; a readable, too-old one stops before setup starts.
+check_version() {
+    local name="$1" major minor
+    if ! [[ "$2" =~ ([0-9]+)\.([0-9]+) ]]; then
+        warn "Couldn't read the $name version. $3.$4 or newer is needed."
+        return 0
+    fi
+    major="${BASH_REMATCH[1]}"
+    minor="${BASH_REMATCH[2]}"
+    if [ "$major" -lt "$3" ] || { [ "$major" -eq "$3" ] && [ "$minor" -lt "$4" ]; }; then
+        die "$name $major.$minor is too old. Update to $3.$4 or newer."
+    fi
 }

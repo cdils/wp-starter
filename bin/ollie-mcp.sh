@@ -15,9 +15,9 @@
 # URL in its own plugin map, so the source stays correct across Ollie updates.
 #
 # Usage:
-#   cd ~/Sites/myproject && ~/Sites/ollie-mcp.sh
-#   OLLIE_MCP_USER=cdils ~/Sites/ollie-mcp.sh   # skip the account prompt
-#   MCP_ADAPTER_ZIP=/path/to.zip ~/Sites/ollie-mcp.sh   # fallback when no Ollie Pro
+#   cd ~/Sites/myproject && ~/wp-starter/bin/ollie-mcp.sh
+#   OLLIE_MCP_USER=admin ~/wp-starter/bin/ollie-mcp.sh   # skip the account prompt
+#   MCP_ADAPTER_ZIP=/path/to.zip ~/wp-starter/bin/ollie-mcp.sh   # fallback when no Ollie Pro
 #
 # Requires: lando (running), wp-cli via lando, claude, curl.
 

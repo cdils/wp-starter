@@ -10,15 +10,21 @@ slugify() {
 }
 
 ask_common() {
-    local git_name git_email
+    local git_name git_email gh_login=""
     git_name=$(git config user.name 2>/dev/null || true)
     git_email=$(git config user.email 2>/dev/null || true)
 
     ask AUTHOR_NAME "Author name" "${git_name:--}"
     # Required: WordPress needs it for the admin user, and composer.json for the author.
     ask AUTHOR_EMAIL "Author email" "$git_email"
-    is_set GITHUB_OWNER || info "GitHub owner and repo name the composer.json package and README, and create the repo at the end if you choose to."
-    ask GITHUB_OWNER "GitHub username or organization" "cdils"
+    if ! is_set GITHUB_OWNER; then
+        info "GitHub owner and repo name the composer.json package and README, and create the repo at the end if you choose to."
+        # Only a logged-in gh knows who you are; otherwise the answer is required.
+        if command -v gh >/dev/null 2>&1; then
+            gh_login=$(gh api user -q .login 2>/dev/null || true)
+        fi
+    fi
+    ask GITHUB_OWNER "GitHub username or organization" "$gh_login"
     ask GITHUB_REPO "GitHub repository name" "$PROJECT_NAME"
 }
 
