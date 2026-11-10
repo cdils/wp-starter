@@ -12,7 +12,7 @@ A guided setup for Lando + Composer WordPress projects. One wizard covers the th
 Clone this repo anywhere, then run the wizard from the folder that holds your projects. New projects are created there. With no command, it asks which one you need.
 
 ```bash
-git clone <repo-url> ~/wp-starter
+git clone https://github.com/cdils/wp-starter.git ~/wp-starter
 cd ~/Sites            # wherever your projects live
 ~/wp-starter/wp-project.sh
 ```
