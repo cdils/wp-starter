@@ -33,6 +33,8 @@ run_adopt() {
 }
 
 stage_pull() {
+    # rsync and the export print nothing until they finish, which looks like a hang.
+    warn "This can take several minutes on a large site, with no output while it runs."
     if [ "$PULL_SOURCE" = ssh ]; then
         pull_files_ssh
         pull_db_ssh
