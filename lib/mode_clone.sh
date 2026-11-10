@@ -4,7 +4,7 @@ run_clone() {
     heading "Existing repo"
     preflight lando docker git composer php perl openssl
 
-    ask REPO_URL "Repository URL"
+    ask REPO_URL "Repository URL (SSH or HTTPS)"
     local base
     base=$(basename "$REPO_URL" .git)
     ask PROJECT_FOLDER "Local folder name" "$(slugify "$base")" valid_slug
@@ -45,10 +45,10 @@ run_clone() {
         skip "Skip for now"
     case "$DB_SOURCE" in
         dump)
-            ask SQL_PATH "Path to the .sql or .sql.gz file"
+            ask SQL_PATH "Path to the .sql or .sql.gz file" "" valid_sql_file
             SQL_PATH=$(abs_path "$SQL_PATH")
             ;;
-        ssh) ask_ssh_source ;;
+        ssh) ask_ssh_source "Connect to the server to copy the database from. Staging is safer when its content is realistic: production holds real people's data." ;;
         fresh)
             ask ADMIN_USER "WordPress admin username" "admin"
             ask SITE_TITLE "Site title" "$(title_case "$PROJECT_NAME")"
@@ -124,16 +124,18 @@ stage_clone_db() {
 }
 
 stages_clone() {
-    if [ "$NEEDS_SCAFFOLD" = true ]; then run_stage "Adding missing files" stage_fill_gaps; fi
-    run_stage "Creating .env" write_env
-    if needs_auth_json; then run_stage "Checking auth.json" require_auth_json; fi
-    run_stage "Starting Lando" lando_start
-    run_stage "Installing Composer packages" composer_install
-    run_stage "Installing JS packages" clone_js
-    run_stage "Setting up the database" stage_clone_db
+    add_stage "Adding missing files" stage_fill_gaps '[ "$NEEDS_SCAFFOLD" = true ]'
+    add_stage "Creating .env" write_env
+    add_stage "Checking auth.json" require_auth_json needs_auth_json
+    add_stage "Starting Lando" lando_start
+    add_stage "Installing Composer packages" composer_install
+    add_stage "Installing JS packages" clone_js
+    add_stage "Setting up the database" stage_clone_db
+    run_stages
     trap - EXIT
 
     remove_dump_dir
+    close_ssh
     heading "Ready"
     local url
     url=$(sed -nE 's/^WP_HOME="?([^"]+)"?.*/\1/p' .env.example 2>/dev/null | head -n1)

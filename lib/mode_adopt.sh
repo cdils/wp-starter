@@ -14,11 +14,12 @@ run_adopt() {
         ssh "Over SSH (needs rsync, and WP-CLI on the server)" \
         backup "From a backup you already have"
     if [ "$PULL_SOURCE" = ssh ]; then
-        ask_ssh_source
+        ask_ssh_source "Connect to the production site you're adopting. Its URL becomes the production URL for media and deploys."
     else
-        ask BACKUP_PATH "Backup folder or .zip containing wp-content"
+        is_set BACKUP_PATH || info "Any folder or .zip with wp-content and a .sql inside, such as a hosting panel backup. .wpress files and UpdraftPlus's split zips won't work."
+        ask BACKUP_PATH "Backup folder or .zip containing wp-content" "" valid_backup
         BACKUP_PATH=$(abs_path "$BACKUP_PATH")
-        ask SQL_PATH "Path to the .sql or .sql.gz (blank to find it in the backup)" "-"
+        ask SQL_PATH "Path to the .sql or .sql.gz (blank to find it in the backup)" "-" valid_sql_file
         SQL_PATH=$(abs_path "$SQL_PATH")
     fi
 
@@ -39,6 +40,12 @@ stage_pull() {
         pull_files_backup
     fi
     save_answers
+}
+
+valid_pulled_theme() {
+    [ -f "wp-content/themes/$1/style.css" ] && return 0
+    warn "No theme named $1 in wp-content/themes."
+    return 1
 }
 
 # Asked after the pull, so defaults can come from the real site.
@@ -69,11 +76,10 @@ stage_adopt_questions() {
         theme_default="$active"
     fi
     info "Themes found: $(find wp-content/themes -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort | tr '\n' ' ')"
-    ask THEME_NAME "Custom theme to track in git (blank if none)" "$theme_default"
+    ask THEME_NAME "Custom theme to track in git (blank if none)" "$theme_default" valid_pulled_theme
 
     THEME_KIND=none
     if [ -n "$THEME_NAME" ]; then
-        [ -f "wp-content/themes/$THEME_NAME/style.css" ] || die "No such theme: $THEME_NAME"
         THEME_KIND=standalone
         PARENT_THEME=$(sed -nE 's/^[[:space:]]*\*?[[:space:]]*Template:[[:space:]]*([^[:space:]]+).*/\1/p' \
             "wp-content/themes/$THEME_NAME/style.css" | head -n1)
@@ -86,13 +92,13 @@ stage_adopt_questions() {
     if [ -n "$THEME_NAME" ]; then
         local assets_default=n
         [ -f "wp-content/themes/$THEME_NAME/assets/scss/main.scss" ] && assets_default=y
-        ask_yn ASSETS "Use the webpack + pnpm asset build?" "$assets_default"
+        ask_yn ASSETS "Add a webpack + pnpm build for the theme's SCSS and JS (assets/)?" "$assets_default"
     fi
 
     PRODUCTION_URL="${PRODUCTION_URL:-$OLD_URL}"
     export PRODUCTION_URL
     remember PRODUCTION_URL
-    ask_yn PROD_INTEGRATION "Proxy missing media from production?" y
+    ask_yn PROD_INTEGRATION "Load missing media from production? (Uploads aren't copied locally.)" y
     ask_premium
     ask_deploy
     ask_common
@@ -157,26 +163,26 @@ stage_adopt_db() {
 }
 
 stages_adopt() {
-    run_stage "Pulling the site" stage_pull
-    run_stage "Project questions" stage_adopt_questions
-    # shellcheck disable=SC1090
-    . "./$ANSWERS_FILE"
-    derive_tokens
-    run_stage "Writing project files" stage_adopt_files
-    run_stage "Configuring Composer" composer_config_project
-    run_stage "Sorting plugins and themes" stage_composerize
-    run_stage "Removing Composer-managed copies" stage_remove_managed
-    run_stage "Creating .env" write_env
-    if [ "$HAS_AUTH" = true ]; then run_stage "Checking auth.json" require_auth_json; fi
-    run_stage "Starting Lando" lando_start
-    run_stage "Installing Composer packages" composer_install
-    if [ "$ASSETS" = true ]; then run_stage "Building assets" js_install_and_build; fi
-    run_stage "Importing the database" stage_adopt_db
-    run_stage "First commit" first_commit
-    run_stage "GitHub" create_github_repo
+    # HAS_AUTH and ASSETS are unset until the questions stage answers them.
+    add_stage "Pulling the site" stage_pull
+    add_stage "Project questions" stage_adopt_questions
+    add_stage "Writing project files" stage_adopt_files
+    add_stage "Configuring Composer" composer_config_project
+    add_stage "Sorting plugins and themes" stage_composerize
+    add_stage "Removing Composer-managed copies" stage_remove_managed
+    add_stage "Creating .env" write_env
+    add_stage "Checking auth.json" require_auth_json '[ "${HAS_AUTH-true}" = true ]'
+    add_stage "Starting Lando" lando_start
+    add_stage "Installing Composer packages" composer_install
+    add_stage "Building assets" js_install_and_build '[ "${ASSETS-true}" = true ]'
+    add_stage "Importing the database" stage_adopt_db
+    add_stage "First commit" first_commit
+    add_stage "GitHub" create_github_repo
+    run_stages
     trap - EXIT
 
     remove_dump_dir
+    close_ssh
     heading "Ready"
     ok "Site:  $DEV_URL"
     ok "Admin: $DEV_URL/cms/wp-admin/ (use your live login)"

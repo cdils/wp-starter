@@ -5,13 +5,71 @@
 PULL_EXCLUDES=(--exclude=/uploads/ --exclude=/cache/ --exclude=/upgrade/ --exclude=/upgrade-temp-backup/
     --exclude=/ai1wm-backups/ --exclude=/updraft/ --exclude=debug.log --exclude=error_log)
 
+# ask_ssh_source "Which server, and why": modes differ on whether staging will do.
 ask_ssh_source() {
-    ask SSH_TARGET "SSH target (user@host, or an alias from ~/.ssh/config)"
-    ask REMOTE_PORT "SSH port" "22"
-    ask REMOTE_DOCROOT "Remote WordPress root"
+    is_set SSH_TARGET || info "$1"
+    while true; do
+        ask SSH_TARGET "SSH target (user@host, or an alias from ~/.ssh/config)"
+        ask REMOTE_PORT "SSH port (SiteGround uses 18765)" "22" valid_port
+        remote_ssh true && break
+        [ "$NONINTERACTIVE" = false ] || die "Couldn't connect to $SSH_TARGET on port $REMOTE_PORT."
+        warn "Couldn't connect to $SSH_TARGET on port $REMOTE_PORT. Check both and try again."
+        unset SSH_TARGET REMOTE_PORT
+    done
+
+    is_set REMOTE_DOCROOT || info "The folder holding wp-content, e.g. ~/sites/acme (WP Engine) or /home/acme/public_html."
+    ask REMOTE_DOCROOT "Remote WordPress root" "" valid_remote_docroot
+    REMOTE_DOCROOT=$(remote_path "$REMOTE_DOCROOT")
 }
 
-remote_ssh() { ssh -p "$REMOTE_PORT" "$SSH_TARGET" "$@" </dev/null; }
+# A leading ~/ becomes home-relative: ssh and rsync both start in home, and a quoted ~
+# isn't expanded by the remote shell. Trailing slashes are dropped.
+remote_path() {
+    local path="$1"
+    case "$path" in
+        "~"|"~/") path="." ;;
+        "~/"*) path="${path#\~/}" ;;
+    esac
+    while [ "${#path}" -gt 1 ] && [ "${path%/}" != "$path" ]; do
+        path="${path%/}"
+    done
+    printf '%s' "$path"
+}
+
+# Checked now, because remote wp errors are discarded and would only surface as an empty pull.
+valid_remote_docroot() {
+    local path status=0
+    path=$(printf '%q' "$(remote_path "$1")")
+    remote_ssh "cd $path 2>/dev/null || exit 3; [ -d wp-content ] || exit 4; command -v wp >/dev/null || exit 5" \
+        || status=$?
+    case "$status" in
+        0) return 0 ;;
+        3) warn "No such folder on the server: $1" ;;
+        4) warn "$1 has no wp-content folder. Use the folder WordPress is installed in." ;;
+        5) warn "WP-CLI (wp) isn't available on the server, so the database can't be exported over SSH." ;;
+        *) warn "Couldn't check $1 over SSH." ;;
+    esac
+    return 1
+}
+
+# One shared connection per run, so a password-only login is typed once, not per call.
+# The socket path is derived from the connection, not stored, because remote_wp runs in
+# subshells. It lives in ~/.ssh, and without that folder each call connects on its own.
+ssh_opts() {
+    printf -- '-p %s' "$REMOTE_PORT"
+    if [ -d "$HOME/.ssh" ]; then
+        printf -- ' -o ControlMaster=auto -o ControlPersist=15m -o ControlPath=%s' "$HOME/.ssh/wp-project-%C"
+    fi
+}
+
+# shellcheck disable=SC2046 # ssh_opts is split on purpose; none of its words hold spaces.
+remote_ssh() { ssh $(ssh_opts) "$SSH_TARGET" "$@" </dev/null; }
+
+# shellcheck disable=SC2046
+close_ssh() {
+    [ -n "${SSH_TARGET:-}" ] && [ -d "$HOME/.ssh" ] || return 0
+    ssh $(ssh_opts) -O exit "$SSH_TARGET" 2>/dev/null || true
+}
 
 remote_wp() {
     remote_ssh "cd $(printf '%q' "$REMOTE_DOCROOT") && wp $*" 2>/dev/null | tail -1 | tr -d '\r'
@@ -50,7 +108,7 @@ pull_db_ssh() {
 pull_files_ssh() {
     info "Copying wp-content (without uploads)..."
     mkdir -p wp-content
-    rsync -az -e "ssh -p $REMOTE_PORT" "${PULL_EXCLUDES[@]}" \
+    rsync -az -e "ssh $(ssh_opts)" "${PULL_EXCLUDES[@]}" \
         "$SSH_TARGET:$REMOTE_DOCROOT/wp-content/" wp-content/
 }
 

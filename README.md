@@ -16,7 +16,31 @@ ln -s ~/Sites/wp-starter/wp-project.sh ~/Sites/wp-project.sh
 cd ~/Sites && ./wp-project.sh
 ```
 
-Requires Lando, a running Docker, git, Composer, PHP, perl, openssl and curl. `adopt` also needs rsync. Works with the bash that ships with macOS.
+Works with the bash that ships with macOS. Setup runs as numbered steps, and `resume` picks up at the step that stopped.
+
+## Before you start
+
+**Every mode** needs Lando with Docker running, plus git, Composer, PHP, perl, openssl and curl on your machine. Node and pnpm run inside Lando, so you don't need them locally. To have the wizard create the GitHub repo at the end, install `gh` and run `gh auth login` first. Without `gh`, that step is skipped.
+
+**`adopt` over SSH** pulls from the **production** site, whose URL becomes the project's production URL. You need:
+
+- SSH access to production. A key with a `Host` alias in `~/.ssh/config` is easiest. A password works too: the wizard reuses one connection, so you type it once.
+- WP-CLI on the server, and rsync on your machine.
+- The folder WordPress lives in on the server, the one holding `wp-content`. On WP Engine that's `~/sites/<install>`; on cPanel hosts it's usually `~/public_html`. The wizard checks it before going on.
+
+**`adopt` from a backup** needs a folder or `.zip` with `wp-content` and a `.sql` or `.sql.gz` dump inside, such as a hosting panel backup. All-in-One WP Migration `.wpress` files and UpdraftPlus's split archives won't work.
+
+**`clone`** needs git access to the repo, plus a database source: a dump file, SSH access to any environment (staging is safer, since production holds real people's data), a fresh install, or nothing for now.
+
+**Premium Composer repos** need credentials in `auth.json`, which the wizard asks for when it gets there:
+
+| Plugin | Credentials |
+|---|---|
+| WP Migrate DB Pro | Composer username and password from your Delicious Brains account |
+| Gravity Forms | License key and the site URL it's registered to |
+| Yoast SEO Premium | MyYoast token ID and secret |
+
+**Deploys** need nothing up front. The wizard prints the GitHub secrets to add when it finishes.
 
 ## What you get
 

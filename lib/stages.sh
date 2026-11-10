@@ -38,18 +38,53 @@ on_stage_exit() {
     fi
 }
 
-# run_stage "Label" function
+# run_stage "Label" function [progress]
 run_stage() {
-    local label="$1" fn="$2"
+    local label="$1" fn="$2" progress="${3:+$3 }"
     if stage_done "$fn"; then
-        info "Already done: $label"
+        info "${progress}Already done: $label"
         return 0
     fi
     CURRENT_STAGE="$label"
-    printf "\n${GREEN}==> %s${NC}\n" "$label"
+    printf "\n${GREEN}==> %s%s${NC}\n" "$progress" "$label"
     "$fn"
     echo "$fn" >> "$STATE_FILE"
     CURRENT_STAGE=""
+}
+
+STAGE_LABELS=()
+STAGE_FNS=()
+STAGE_CONDITIONS=()
+
+# add_stage "Label" function [condition]: the condition is checked when the stage is
+# reached, so it can depend on answers an earlier stage collects. Write it so an
+# unanswered question counts the stage in: the total should shrink, not grow.
+add_stage() {
+    STAGE_LABELS+=("$1")
+    STAGE_FNS+=("$2")
+    STAGE_CONDITIONS+=("${3:-true}")
+}
+
+stage_applies() { eval "${STAGE_CONDITIONS[$1]}"; }
+
+run_stages() {
+    local i j n total
+    for i in "${!STAGE_FNS[@]}"; do
+        stage_applies "$i" || continue
+        # Recounted at every stage, since an earlier one can settle a later one's condition.
+        n=0
+        total=0
+        for j in "${!STAGE_FNS[@]}"; do
+            if stage_applies "$j"; then
+                total=$((total + 1))
+                if [ "$j" -le "$i" ]; then n=$((n + 1)); fi
+            fi
+        done
+        run_stage "${STAGE_LABELS[$i]}" "${STAGE_FNS[$i]}" "[$n/$total]"
+    done
+    STAGE_LABELS=()
+    STAGE_FNS=()
+    STAGE_CONDITIONS=()
 }
 
 run_resume() {

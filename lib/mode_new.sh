@@ -83,7 +83,7 @@ run_new() {
         export ASSETS
         remember ASSETS
     else
-        ask_yn ASSETS "Use the webpack + pnpm asset build?" n
+        ask_yn ASSETS "Add a webpack + pnpm build for the theme's SCSS and JS (assets/)?" n
     fi
     ask_production
     ask_premium
@@ -127,17 +127,18 @@ run_new() {
 }
 
 stages_new() {
-    run_stage "Writing project files" stage_files
-    run_stage "Configuring Composer" composer_config_project
-    run_stage "Setting up the theme" stage_theme
-    run_stage "Creating .env" write_env
-    if [ "$HAS_AUTH" = true ]; then run_stage "Checking auth.json" require_auth_json; fi
-    run_stage "Starting Lando" lando_start
-    run_stage "Installing Composer packages" composer_install
-    if [ "$ASSETS" = true ]; then run_stage "Building assets" js_install_and_build; fi
-    run_stage "Installing WordPress" stage_install_wp
-    run_stage "First commit" first_commit
-    run_stage "GitHub" create_github_repo
+    add_stage "Writing project files" stage_files
+    add_stage "Configuring Composer" composer_config_project
+    add_stage "Setting up the theme" stage_theme
+    add_stage "Creating .env" write_env
+    add_stage "Checking auth.json" require_auth_json '[ "$HAS_AUTH" = true ]'
+    add_stage "Starting Lando" lando_start
+    add_stage "Installing Composer packages" composer_install
+    add_stage "Building assets" js_install_and_build '[ "$ASSETS" = true ]'
+    add_stage "Installing WordPress" stage_install_wp
+    add_stage "First commit" first_commit
+    add_stage "GitHub" create_github_repo
+    run_stages
     trap - EXIT
     finish_new
 }

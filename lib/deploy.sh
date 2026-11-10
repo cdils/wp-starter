@@ -22,9 +22,9 @@ ask_deploy() {
         ask STAGING_URL "Staging URL" "" valid_url
     fi
     if [ "$DEPLOY_HOST" = wpengine ]; then
-        ask WPE_ENV_PRODUCTION "WP Engine production install name" "" valid_slug
+        ask WPE_ENV_PRODUCTION "WP Engine production install name (the acme in acme.wpengine.com)" "" valid_slug
         if [ "$HAS_STAGING" = true ]; then
-            ask WPE_ENV_STAGING "WP Engine staging install name" "" valid_slug
+            ask WPE_ENV_STAGING "WP Engine staging install name (the acmestg in acmestg.wpengine.com)" "" valid_slug
         fi
     fi
 }

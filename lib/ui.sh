@@ -177,3 +177,26 @@ valid_branch() {
     warn "Use a plain git branch name."
     return 1
 }
+
+valid_port() {
+    [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ] && return 0
+    warn "Use a port number, for example 22."
+    return 1
+}
+
+# Local paths are checked as typed, so ~ and relative paths resolve the way abs_path will.
+valid_backup() {
+    local path
+    path=$(abs_path "$1")
+    { [ -d "$path" ] || [[ -f "$path" && "$path" == *.zip ]]; } && return 0
+    warn "Not a folder or .zip: $1"
+    return 1
+}
+
+valid_sql_file() {
+    local path
+    path=$(abs_path "$1")
+    [[ -f "$path" && ( "$path" == *.sql || "$path" == *.sql.gz ) ]] && return 0
+    warn "Not a .sql or .sql.gz file: $1"
+    return 1
+}

@@ -17,6 +17,7 @@ ask_common() {
     ask AUTHOR_NAME "Author name" "${git_name:--}"
     # Required: WordPress needs it for the admin user, and composer.json for the author.
     ask AUTHOR_EMAIL "Author email" "$git_email"
+    is_set GITHUB_OWNER || info "GitHub owner and repo name the composer.json package and README, and create the repo at the end if you choose to."
     ask GITHUB_OWNER "GitHub username or organization" "cdils"
     ask GITHUB_REPO "GitHub repository name" "$PROJECT_NAME"
 }
@@ -30,7 +31,7 @@ ask_premium() {
 ask_production() {
     ask PRODUCTION_URL "Production URL (optional)" "-" valid_url
     if [ -n "$PRODUCTION_URL" ]; then
-        ask_yn PROD_INTEGRATION "Proxy missing media from production?" n
+        ask_yn PROD_INTEGRATION "Load missing media from production? (Uploads aren't copied locally.)" n
     else
         PROD_INTEGRATION=false
         export PROD_INTEGRATION
