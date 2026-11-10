@@ -131,7 +131,7 @@ stages_new() {
     add_stage "Configuring Composer" composer_config_project
     add_stage "Setting up the theme" stage_theme
     add_stage "Creating .env" write_env
-    add_stage "Checking auth.json" require_auth_json '[ "$HAS_AUTH" = true ]'
+    add_stage "Setting up auth.json" require_auth_json '[ "$HAS_AUTH" = true ]'
     add_stage "Starting Lando" lando_start
     add_stage "Installing Composer packages" composer_install
     add_stage "Building assets" js_install_and_build '[ "$ASSETS" = true ]'
@@ -253,6 +253,7 @@ finish_new() {
     ok "Mail:  https://mail.${PROJECT_NAME}.lndo.site"
     [ "$THEME_KIND" = none ] && warn "No theme is installed yet, so the front end will be blank."
     print_deploy_checklist
+    print_skipped_premium
     if [ "${PARENT_THEME:-}" = ollie ]; then
         printf "\nTo connect Ollie's MCP server to Claude Code, install Ollie Pro, then run:\n"
         info "  $STARTER_ROOT/bin/ollie-mcp.sh"

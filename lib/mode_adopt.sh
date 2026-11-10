@@ -173,7 +173,7 @@ stages_adopt() {
     add_stage "Sorting plugins and themes" stage_composerize
     add_stage "Removing Composer-managed copies" stage_remove_managed
     add_stage "Creating .env" write_env
-    add_stage "Checking auth.json" require_auth_json '[ "${HAS_AUTH-true}" = true ]'
+    add_stage "Setting up auth.json" require_auth_json '[ "${HAS_AUTH-true}" = true ]'
     add_stage "Starting Lando" lando_start
     add_stage "Installing Composer packages" composer_install
     add_stage "Building assets" js_install_and_build '[ "${ASSETS-true}" = true ]'
@@ -191,5 +191,6 @@ stages_adopt() {
     warn "Outbound email is disabled by the disable-emails plugin."
     warn "The local database is a copy of production. Treat it as personal data."
     print_deploy_checklist
+    print_skipped_premium
     rm -f "$STATE_FILE" "$ANSWERS_FILE"
 }

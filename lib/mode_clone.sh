@@ -65,17 +65,7 @@ run_clone() {
     stages_clone
 }
 
-needs_auth_json() {
-    [ -f composer.json ] || return 1
-    php -r '
-        $j = json_decode( file_get_contents( "composer.json" ), true );
-        foreach ( $j["repositories"] ?? array() as $r ) {
-            if ( ( $r["type"] ?? "" ) === "composer" && false === strpos( $r["url"] ?? "", "wpackagist" ) ) {
-                exit( 0 );
-            }
-        }
-        exit( 1 );'
-}
+needs_auth_json() { [ -n "$(premium_hosts)" ]; }
 
 stage_fill_gaps() {
     render_overlay "$STARTER_ROOT/templates/base" . keep
@@ -126,7 +116,7 @@ stage_clone_db() {
 stages_clone() {
     add_stage "Adding missing files" stage_fill_gaps '[ "$NEEDS_SCAFFOLD" = true ]'
     add_stage "Creating .env" write_env
-    add_stage "Checking auth.json" require_auth_json needs_auth_json
+    add_stage "Setting up auth.json" require_auth_json needs_auth_json
     add_stage "Starting Lando" lando_start
     add_stage "Installing Composer packages" composer_install
     add_stage "Installing JS packages" clone_js

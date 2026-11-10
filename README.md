@@ -39,13 +39,13 @@ Adopting copies the production database to your machine, including users' names,
 
 **`clone`** needs git access to the repo, plus a database source: a dump file, SSH access to any environment (staging is safer, since production holds real people's data), a fresh install, or nothing for now.
 
-**Premium Composer repos** need credentials in `auth.json`, which the wizard asks for when it gets there:
+**Premium Composer repos** need each project's own credentials, since licenses usually differ per client. The wizard writes `auth.json` with placeholders for the plugins you picked, then waits while you fill it in. It checks Gravity Forms credentials right away; the other vendors are only checked at the Composer install, and the wizard names the vendor if one fails. Don't have a license yet? Type `skip` at the pause: setup finishes without that plugin and prints the commands to add it later. (In `clone`, the plugins belong to the repo, so you can't skip them; ask the team for credentials.)
 
 | Plugin | Credentials |
 |---|---|
-| WP Migrate DB Pro | Composer username and password from your Delicious Brains account |
-| Gravity Forms | License key and the site URL it's registered to |
-| Yoast SEO Premium | MyYoast token ID and secret |
+| WP Migrate DB Pro | Composer username and password, copied from your Delicious Brains account settings |
+| Gravity Forms | License key, and the URL of the site it's licensed for. Don't reuse another project's auth.json: it carries that site's URL |
+| Yoast SEO Premium | A Composer token from MyYoast |
 
 **Deploys** need nothing up front. The wizard prints the GitHub secrets to add when it finishes.
 

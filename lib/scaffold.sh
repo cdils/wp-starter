@@ -105,42 +105,45 @@ render_overlay() {
     done < <(find "$src" -type f ! -name .DS_Store | sort)
 }
 
-write_auth_example() {
-    [ "$HAS_AUTH" = true ] || return 0
-    local -a entries=()
-    [ "$WP_MIGRATE" = true ] && entries+=('composer.deliciousbrains.com|{WP_MIGRATE_USERNAME}|{WP_MIGRATE_PASSWORD}')
-    [ "$GRAVITY_FORMS" = true ] && entries+=('composer.gravity.io|{GRAVITY_LICENSE_KEY}|{GRAVITY_SITE_URL}')
-    [ "$YOAST_PREMIUM" = true ] && entries+=('my.yoast.com|{MYYOAST_TOKEN_ID}|{MYYOAST_TOKEN_SECRET}')
+# Every premium vendor the wizard knows, as
+# label|repository name|repository URL|package|answer variable|username|password.
+# Username and password are auth.json placeholders, except where the vendor fixes one.
+PREMIUM_VENDOR_HOSTS="composer.deliciousbrains.com composer.gravity.io my.yoast.com"
+premium_vendor() {
+    case "$1" in
+        composer.deliciousbrains.com)
+            echo "WP Migrate DB Pro|wp-migrate|https://composer.deliciousbrains.com|deliciousbrains-plugin/wp-migrate-db-pro:^2.7|WP_MIGRATE|{WP_MIGRATE_USERNAME}|{WP_MIGRATE_PASSWORD}" ;;
+        composer.gravity.io)
+            echo "Gravity Forms|gravity|https://composer.gravity.io|gravity/gravityforms:*|GRAVITY_FORMS|{GRAVITY_LICENSE_KEY}|{THIS_SITE_URL}" ;;
+        my.yoast.com)
+            # Yoast's username is the literal word "token".
+            echo "Yoast SEO Premium|my-yoast|https://my.yoast.com/packages/|yoast/wordpress-seo-premium:*|YOAST_PREMIUM|token|{MYYOAST_TOKEN}" ;;
+        *)
+            echo "$1|||||{USERNAME}|{PASSWORD}" ;;
+    esac
+}
 
-    local entry host user pass i=0 last=$((${#entries[@]} - 1))
-    {
-        printf '{\n    "http-basic": {\n'
-        for entry in "${entries[@]}"; do
-            IFS='|' read -r host user pass <<< "$entry"
-            printf '        "%s": {\n            "username": "%s",\n            "password": "%s"\n        }' "$host" "$user" "$pass"
-            [ "$i" -lt "$last" ] && printf ','
-            printf '\n'
-            i=$((i + 1))
-        done
-        printf '    }\n}\n'
-    } > auth.json.example
+write_auth_example() {
+    local host flag user pass
+    rm -f auth.json.example
+    [ "$HAS_AUTH" = true ] || return 0
+    for host in $PREMIUM_VENDOR_HOSTS; do
+        IFS='|' read -r _ _ _ _ flag user pass <<< "$(premium_vendor "$host")"
+        if [ "${!flag:-false}" = true ]; then auth_put auth.json.example "$host" "$user" "$pass"; fi
+    done
+    chmod 644 auth.json.example
 }
 
 composer_config_project() {
     local -a require=() require_dev=()
 
-    if [ "$WP_MIGRATE" = true ]; then
-        composer config --no-interaction repositories.wp-migrate composer https://composer.deliciousbrains.com
-        require+=("deliciousbrains-plugin/wp-migrate-db-pro:^2.7")
-    fi
-    if [ "$GRAVITY_FORMS" = true ]; then
-        composer config --no-interaction repositories.gravity composer https://composer.gravity.io
-        require+=("gravity/gravityforms:*")
-    fi
-    if [ "$YOAST_PREMIUM" = true ]; then
-        composer config --no-interaction repositories.my-yoast composer https://my.yoast.com/packages/
-        require+=("yoast/wordpress-seo-premium:*")
-    fi
+    local host repo url package flag
+    for host in $PREMIUM_VENDOR_HOSTS; do
+        IFS='|' read -r _ repo url package flag _ <<< "$(premium_vendor "$host")"
+        [ "${!flag:-false}" = true ] || continue
+        composer config --no-interaction "repositories.$repo" composer "$url"
+        require+=("$package")
+    done
     if [ "$PROD_INTEGRATION" = true ]; then
         composer config --no-interaction repositories.mgratch vcs https://github.com/mgratch/mg-media-management
         require_dev+=("mgratch/mg-media-management:1.1.0")
@@ -174,20 +177,202 @@ write_env() {
     done
 }
 
-require_auth_json() {
-    [ -e auth.json ] && { chmod 600 auth.json; return 0; }
+# Premium repository hosts, one per line. Read from composer.json rather than the
+# answers, so a cloned repo's repositories count too.
+premium_hosts() {
+    [ -f composer.json ] || return 0
+    php -r '
+        $j = json_decode( file_get_contents( "composer.json" ), true );
+        foreach ( $j["repositories"] ?? array() as $r ) {
+            $url = $r["url"] ?? "";
+            if ( ( $r["type"] ?? "" ) === "composer" && false === strpos( $url, "wpackagist" ) ) {
+                echo parse_url( $url, PHP_URL_HOST ), "\n";
+            }
+        }'
+}
 
-    local source=""
-    warn "This project needs auth.json for its premium Composer repositories."
-    [ -f auth.json.example ] && info "See auth.json.example for the format."
-    if [ "$NONINTERACTIVE" = false ]; then
-        read_line source "Path to an auth.json to copy (Enter to stop and add it yourself): "
+auth_label() {
+    local label
+    IFS='|' read -r label _ <<< "$(premium_vendor "$1")"
+    echo "$label"
+}
+
+auth_json_ok() {
+    php -r 'exit( is_array( json_decode( file_get_contents( "auth.json" ), true ) ) ? 0 : 1 );'
+}
+
+# auth_status host: ok, missing, or placeholder (still holds a {LIKE_THIS} value).
+auth_status() {
+    AUTH_HOST="$1" php -r '
+        $j = is_file( "auth.json" ) ? json_decode( file_get_contents( "auth.json" ), true ) : array();
+        $e = $j["http-basic"][ getenv( "AUTH_HOST" ) ] ?? null;
+        if ( ! is_array( $e ) || empty( $e["username"] ) || empty( $e["password"] ) ) {
+            echo "missing";
+            exit;
+        }
+        foreach ( $e as $v ) {
+            if ( preg_match( "/^\{[A-Z_]+\}$/", (string) $v ) ) {
+                echo "placeholder";
+                exit;
+            }
+        }
+        echo "ok";'
+}
+
+# auth_get host username|password
+auth_get() {
+    AUTH_HOST="$1" AUTH_FIELD="$2" php -r '
+        $j = json_decode( file_get_contents( "auth.json" ), true );
+        echo $j["http-basic"][ getenv( "AUTH_HOST" ) ][ getenv( "AUTH_FIELD" ) ] ?? "";'
+}
+
+# auth_put file host username password: an empty username removes the entry, and a
+# file left with no entries is deleted. Values travel in the environment, not argv.
+auth_put() {
+    (umask 077 && AUTH_FILE="$1" AUTH_HOST="$2" AUTH_USER="$3" AUTH_PASS="$4" php -r '
+        $f = getenv( "AUTH_FILE" );
+        $j = is_file( $f ) ? json_decode( file_get_contents( $f ), true ) : array();
+        if ( "" === getenv( "AUTH_USER" ) ) {
+            unset( $j["http-basic"][ getenv( "AUTH_HOST" ) ] );
+        } else {
+            $j["http-basic"][ getenv( "AUTH_HOST" ) ] = array(
+                "username" => getenv( "AUTH_USER" ),
+                "password" => getenv( "AUTH_PASS" ),
+            );
+        }
+        if ( empty( $j["http-basic"] ) ) {
+            unset( $j["http-basic"] );
+        }
+        if ( empty( $j ) ) {
+            is_file( $f ) && unlink( $f );
+            exit;
+        }
+        file_put_contents( $f, json_encode( $j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . "\n" );')
+}
+
+# Only Gravity rejects bad credentials before a real download, so only it is checked
+# here. Anything but an auth error passes: a network blip shouldn't block setup.
+auth_valid() {
+    [ "$1" = composer.gravity.io ] || return 0
+    local user pass status
+    user=$(auth_get "$1" username)
+    pass=$(auth_get "$1" password)
+    user="${user//\\/\\\\}"
+    pass="${pass//\\/\\\\}"
+    status=$(printf 'user = "%s:%s"\n' "${user//\"/\\\"}" "${pass//\"/\\\"}" \
+        | curl -s -I --max-time 15 -o /dev/null -w '%{http_code}' -K - \
+            "https://composer.gravity.io/downloads/?plugin=gravityforms" || true)
+    case "$status" in
+        401|402|403) return 1 ;;
+        000) warn "Couldn't reach Gravity Forms to check the license. Continuing." ;;
+    esac
+    return 0
+}
+
+# You fill in auth.json yourself: it starts with placeholders, and setup waits until
+# they're replaced. Licenses are usually per client, so nothing is reused across projects.
+require_auth_json() {
+    local -a hosts=() problems=() problem_hosts=()
+    local host label user pass reply
+    while IFS= read -r host; do
+        [ -n "$host" ] && hosts+=("$host")
+    done < <(premium_hosts)
+    [ "${#hosts[@]}" -gt 0 ] || return 0
+
+    if [ ! -e auth.json ] || auth_json_ok; then
+        for host in "${hosts[@]}"; do
+            if [ "$(auth_status "$host")" = missing ]; then
+                IFS='|' read -r _ _ _ _ _ user pass <<< "$(premium_vendor "$host")"
+                auth_put auth.json "$host" "$user" "$pass"
+            fi
+        done
     fi
-    source=$(abs_path "$source")
-    [ -n "$source" ] || die "Add auth.json to this folder, then resume."
-    [ -f "$source" ] || die "Not found: $source"
-    cp "$source" auth.json
     chmod 600 auth.json
+
+    while true; do
+        problems=()
+        problem_hosts=()
+        if ! auth_json_ok; then
+            problems+=("auth.json isn't valid JSON.")
+            problem_hosts=("${hosts[@]}")
+        else
+            for host in "${hosts[@]}"; do
+                label=$(auth_label "$host")
+                if [ "$(auth_status "$host")" != ok ]; then
+                    problems+=("$label: replace the {PLACEHOLDERS}.")
+                elif [ "$host" = "${AUTH_REJECTED:-}" ]; then
+                    problems+=("$label: rejected at the last Composer install. Check the values and that the license is active.")
+                elif ! auth_valid "$host"; then
+                    problems+=("$label: rejected these credentials. Check the values and that the license is active.")
+                else
+                    continue
+                fi
+                problem_hosts+=("$host")
+            done
+        fi
+        [ "${#problems[@]}" -gt 0 ] || break
+
+        warn "auth.json needs your premium plugin credentials:"
+        printf '  - %s\n' "${problems[@]}"
+        info "File: $PWD/auth.json (auth.json.example shows the format)"
+        [ "$NONINTERACTIVE" = false ] || die "Fill in auth.json, then resume."
+        if [ "$MODE" = clone ]; then
+            # The repo's composer.json is the team's, so its plugins can't be dropped here.
+            read_line reply "Edit it, then press Enter: "
+        else
+            read_line reply "Edit it, then press Enter (or type skip to set up without these plugins): "
+            if [ "$reply" = skip ]; then
+                skip_premium "${problem_hosts[@]}"
+                break
+            fi
+        fi
+        # A rejection from Composer can't be rechecked here, so the edit is trusted.
+        AUTH_REJECTED=""
+    done
+    AUTH_REJECTED=""
+    export AUTH_REJECTED
+    remember AUTH_REJECTED
+}
+
+# Drops premium plugins this run added, so setup can finish while a license is pending.
+skip_premium() {
+    local host label repo url package flag
+    for host in "$@"; do
+        IFS='|' read -r label repo url package flag _ <<< "$(premium_vendor "$host")"
+        [ -n "$flag" ] || continue
+        # A lock from an earlier install still lists the plugin, and install follows the
+        # lock, so it's updated too. Removing needs no download, and no credentials.
+        if [ -f composer.lock ]; then
+            composer remove --no-interaction --no-install "${package%%:*}"
+        else
+            composer remove --no-interaction --no-update "${package%%:*}"
+        fi
+        composer config --no-interaction --unset "repositories.$repo"
+        printf -v "$flag" '%s' false
+        export "${flag?}"
+        remember "$flag"
+        SKIPPED_PREMIUM="${SKIPPED_PREMIUM:-} $host"
+        if [ -e auth.json ] && auth_json_ok; then auth_put auth.json "$host" "" ""; fi
+    done
+    export SKIPPED_PREMIUM
+    remember SKIPPED_PREMIUM
+    derive_tokens
+    write_auth_example
+    save_answers
+    print_skipped_premium
+}
+
+print_skipped_premium() {
+    local host label repo url package user pass
+    for host in ${SKIPPED_PREMIUM:-}; do
+        IFS='|' read -r label repo url package _ user pass <<< "$(premium_vendor "$host")"
+        printf "\n"
+        warn "$label was skipped. To add it later, put this in auth.json under \"http-basic\":"
+        info "  \"$host\": { \"username\": \"$user\", \"password\": \"$pass\" }"
+        info "Then run:"
+        info "  lando composer config repositories.$repo composer $url"
+        info "  lando composer require ${package%%:*}"
+    done
 }
 
 # Lando names containers and volumes after the app, not the folder. A second checkout
@@ -208,7 +393,35 @@ lando_start() {
     lando start
 }
 
-composer_install() { lando composer install --no-interaction; }
+# Composer's own auth errors bury the cause in a stack of usage text, so name it.
+composer_install() {
+    local log status=0 host
+    log=$(mktemp)
+    lando composer install --no-interaction 2>&1 | tee "$log" || status=$?
+    if [ "$status" -ne 0 ]; then
+        # Joined first: Composer wraps long URLs across lines.
+        host=$(tr '\n' ' ' < "$log" \
+            | sed -nE 's|.*"https://([^/"]+)/[^"]*" file could not be downloaded \(HTTP/[0-9.]+ 40[123].*|\1|p')
+        if [ -n "$host" ]; then
+            printf "\n"
+            warn "$(auth_label "$host") rejected the credentials in auth.json."
+            if [ "$MODE" = clone ]; then
+                warn "Resume waits while you fix them."
+            else
+                warn "Resume waits while you fix them, or lets you skip the plugin."
+            fi
+            # Repeats the auth step on resume, flagged, so it stops there before installing again.
+            AUTH_REJECTED="$host"
+            export AUTH_REJECTED
+            remember AUTH_REJECTED
+            save_answers
+            grep -vx require_auth_json "$STATE_FILE" > "$STATE_FILE.tmp" || true
+            mv "$STATE_FILE.tmp" "$STATE_FILE"
+        fi
+    fi
+    rm -f "$log"
+    return "$status"
+}
 
 # Keeps whichever package manager the repo already uses.
 js_install_and_build() {
