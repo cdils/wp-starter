@@ -142,6 +142,10 @@ updates the plugin *on the server only*. The git copy is now behind, and
 the next deploy will **downgrade the plugin in production**. Auto-updates must stay disabled for git-committed plugins;
 every update flows through the repo.
 
+### Mu-plugins that depend on a plugin
+
+An mu-plugin that relies on another plugin's hooks or routes puts a check in its file header, starting `After each <plugin> update`, with the command to run and the expected result. Find them with `grep -n "After each" wp-content/mu-plugins/*.php`. `/monthly-maintenance` runs them after updating the named plugin.
+
 ### Update cadence: stages, not batches
 
 **Never update everything at once.** A ten-plugin `composer update` that
@@ -150,13 +154,46 @@ breaks the site tells you nothing about which plugin broke it.
 1. Update **one plugin** (or one tightly-coupled group, e.g. a plugin and
    its add-ons) at a time.
 2. Run the local smoke test: site boots, no new notices in `debug.log`,
-   `wp plugin list` shows the expected version.
+   `wp plugin list` shows the expected version, and any mu-plugin check
+   for that plugin passes.
 3. In-browser QA the surface that plugin owns (see below). A forms plugin
    update means testing forms *in a browser*, not just loading the homepage.
 4. Commit that update on its own, with the version change in the message.
 5. Only then move to the next update.
 6. Core updates (`johnpbloch/wordpress-core`) get their own dedicated
    pass: update core alone, full QA sweep, own commit.
+
+For the monthly maintenance run, use the global `/monthly-maintenance` skill
+(`~/.claude/skills/monthly-maintenance/`). It keeps one commit per update
+and opens a PR listing the browser QA each update calls for.
+
+### Maintenance settings
+
+Read by `/monthly-maintenance`.
+
+| Setting | Value |
+|---|---|
+| Prefix | `lando` |
+@@if HAS_STAGING
+| Base branch | `{{STAGING_BRANCH}}` |
+@@endif
+@@if !HAS_STAGING
+| Base branch | `{{PROD_BRANCH}}` |
+@@endif
+| Local site | `{{PROJECT_NAME}}.lndo.site` |
+| Core package | `johnpbloch/wordpress-core`, constraint `{{WP_CORE_CONSTRAINT}}` |
+| Visual tests | none |
+@@if HAS_SSH
+| Production SSH alias | `{{SSH_ALIAS_PRODUCTION}}` |
+@@endif
+@@if !HAS_SSH
+| Production SSH alias | none |
+@@endif
+
+Database updates to run after a plugin update. Add a row for each plugin that needs one (WooCommerce: `lando wp wc update`).
+
+| Plugin | Command |
+|---|---|
 
 Staged commits mean a broken update is one `git revert` — not an
 archaeology dig through a 40-file lockfile diff.
